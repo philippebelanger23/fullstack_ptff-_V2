@@ -153,9 +153,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data }) => {
           <div className="h-[400px]">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={areaChartData} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                <XAxis dataKey="date" stroke="#94a3b8" tickFormatter={formatDateTick} tick={{ fontSize: 12, fontFamily: 'monospace' }} axisLine={false} tickLine={false} dy={10} minTickGap={30} />
-                <YAxis stroke="#94a3b8" tickFormatter={(val) => `${val.toFixed(0)}%`} tick={{ fontSize: 12, fontFamily: 'monospace' }} axisLine={false} tickLine={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-main)" vertical={false} />
+                <XAxis dataKey="date" stroke="var(--text-muted)" tickFormatter={formatDateTick} tick={{ fontSize: 12, fontFamily: 'monospace' }} axisLine={false} tickLine={false} dy={10} minTickGap={30} />
+                <YAxis stroke="var(--text-muted)" tickFormatter={(val) => `${val.toFixed(0)}%`} tick={{ fontSize: 12, fontFamily: 'monospace' }} axisLine={false} tickLine={false} />
                 <Tooltip content={<CustomAreaTooltip />} />
                 <Legend iconType="square" wrapperStyle={{ paddingTop: '20px', fontFamily: 'monospace', fontSize: '11px' }} />
                 {topTickers.map((ticker, index) => (

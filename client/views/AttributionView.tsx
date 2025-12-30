@@ -229,33 +229,72 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
             // Risk Contribution = Beta * Portfolio StdDev (Since we are using contribution series, this is direct)
             // Or simply use stdDevContrib as "Marginal Risk Contribution" proxy for display
 
-            return { ticker, totalContrib, history, avgWeight, stdDevContrib, beta, riskScore: stdDevContrib };
+            // Get latest weight for "Current Exposure" sorting logic
+            // Find the entry with the max date in the history
+            const latestEntry = history.reduce((latest, current) => {
+                return new Date(current.date).getTime() > new Date(latest.date).getTime() ? current : latest;
+            }, history[0]);
+            const latestWeight = latestEntry ? latestEntry.weight : 0;
+
+            return { ticker, totalContrib, history, avgWeight, latestWeight, stdDevContrib, beta, riskScore: stdDevContrib };
         });
     }, [uniqueTickers, filteredOverviewData, allMonths]);
 
     const sortedByContrib = useMemo(() => [...tickerStats].sort((a, b) => b.totalContrib - a.totalContrib), [tickerStats]);
-    const sortedByWeight = useMemo(() => [...tickerStats].sort((a, b) => b.avgWeight - a.avgWeight), [tickerStats]);
+    // Update: Sort by latestWeight instead of avgWeight to match Dashboard logic
+    const sortedByWeight = useMemo(() => [...tickerStats].sort((a, b) => b.latestWeight - a.latestWeight), [tickerStats]);
 
     const capitalEfficiencyData = useMemo(() => {
-        return tickerStats.map(s => ({
-            ticker: s.ticker,
-            x: s.avgWeight, // Weight
-            y: s.totalContrib, // Contribution
-            z: 1
-        }));
+        // Calculate Total Portfolio Contribution (Sum of all ticker total contributions)
+        const totalPortfolioContrib = tickerStats.reduce((sum, t) => sum + t.totalContrib, 0);
+
+        // Sort by Weight Descending and take Top 10
+        const top10 = [...tickerStats]
+            .sort((a, b) => b.latestWeight - a.latestWeight)
+            .slice(0, 10);
+
+        return top10.map(s => {
+            const shareOfTotal = totalPortfolioContrib !== 0 ? (s.totalContrib / totalPortfolioContrib) : 0;
+            return {
+                ticker: s.ticker,
+                x: s.avgWeight, // Weight %
+                y: shareOfTotal * 100, // Share of Total Return %
+                absoluteContrib: s.totalContrib,
+                z: 1
+            };
+        });
     }, [tickerStats]);
 
-    const riskReturnData = useMemo(() => {
-        return tickerStats.map(s => ({
-            ticker: s.ticker,
-            x: s.stdDevContrib, // Risk Contribution (Vol of Contrib)
-            y: s.totalContrib, // Return Contribution
-            z: s.avgWeight // Bubble size = Weight
-        }));
-    }, [tickerStats]);
+    // Calculate max domain for consistent 1:1 line rendering
+    // Calculate max domain for consistent 1:1 line rendering
+    const { maxDomain, axisTicks } = useMemo(() => {
+        if (capitalEfficiencyData.length === 0) return { maxDomain: 10, axisTicks: [0, 2, 4, 6, 8, 10] };
+
+        const maxX = Math.max(...capitalEfficiencyData.map(d => d.x));
+        const maxY = Math.max(...capitalEfficiencyData.map(d => d.y));
+        const rawMax = Math.max(maxX, maxY) * 1.05; // Reduced buffering to 5%
+
+        // Find nice step size to ensure constant integer steps
+        // Try to target roughly 4-6 intervals
+        let step = 1;
+        if (rawMax > 40) step = 10;
+        else if (rawMax > 20) step = 5;
+        else if (rawMax > 8) step = 2; // e.g. max 14 -> steps of 2 -> 0, 2, 4... 14
+        else step = 1;
+
+        const niceMax = Math.ceil(rawMax / step) * step;
+
+        // Generate ticks
+        const ticks = [];
+        for (let i = 0; i <= niceMax; i += step) {
+            ticks.push(i);
+        }
+
+        return { maxDomain: niceMax, axisTicks: ticks };
+    }, [capitalEfficiencyData]);
 
     const matrixData = sortedByContrib.map(stat => {
-        const row: any = { ticker: stat.ticker, total: stat.totalContrib };
+        const row: any = { ticker: stat.ticker, total: stat.totalContrib, avgWeight: stat.avgWeight }; // Added avgWeight
         allMonths.forEach(monthDate => {
             const m = monthDate.getMonth();
             const y = monthDate.getFullYear();
@@ -263,7 +302,10 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
                 const d = new Date(h.date);
                 return d.getMonth() === m && d.getFullYear() === y;
             });
-            row[`${y}-${m}`] = monthlyEntries.length > 0 ? monthlyEntries.reduce((acc, curr) => acc + (curr.contribution || 0), 0) : null;
+            const key = `${y}-${m}`;
+            row[key] = monthlyEntries.length > 0 ? monthlyEntries.reduce((acc, curr) => acc + (curr.contribution || 0), 0) : null;
+            // Capture max weight for this month to determine if 0.00% is due to strict 0 position
+            row[`w-${key}`] = monthlyEntries.length > 0 ? Math.max(...monthlyEntries.map(e => e.weight)) : 0;
         });
         return row;
     });
@@ -327,6 +369,24 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
         dataPoints.push({ name: 'Total', value: [0, currentVal], delta: currentVal, isTotal: true, color: '#0369a1' });
         return dataPoints;
     }, [sortedByWeight]);
+
+    const waterfallDomain = useMemo(() => {
+        if (waterfallData.length === 0) return [0, 10];
+        let min = 0;
+        let max = 0;
+        waterfallData.forEach(d => {
+            if (d.value[0] < min) min = d.value[0];
+            if (d.value[1] < min) min = d.value[1];
+            if (d.value[0] > max) max = d.value[0];
+            if (d.value[1] > max) max = d.value[1];
+        });
+
+        // Add a tiny buffer (5%) so the top label doesn't get cut off, but keep it tight
+        const range = max - min;
+        const buffer = range * 0.05;
+
+        return [min, max + buffer];
+    }, [waterfallData]);
 
     const topMoversChartData = useMemo(() => {
         const topPos = sortedByContrib.filter(i => i.totalContrib > 0).slice(0, 5);
@@ -395,15 +455,14 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-auto lg:h-[500px]">
                         <div className="lg:col-span-5 bg-white p-6 rounded-xl border border-wallstreet-700 shadow-sm flex flex-col">
                             <div className="mb-4">
-                                <h3 className="font-mono font-bold text-wallstreet-text uppercase tracking-wider text-sm flex items-center gap-2"><TrendingUp size={16} className="text-wallstreet-500" /> Absolute Return Bridge</h3>
-                                <p className="text-[10px] text-wallstreet-500 mt-1">Performance attribution from zero to total return.</p>
+                                <h3 className="font-mono font-bold text-wallstreet-text uppercase tracking-wider text-sm flex items-center gap-2"><TrendingUp size={16} className="text-wallstreet-500" /> Return Waterfall </h3>
                             </div>
                             <div className="flex-1 w-full min-h-[300px]">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <BarChart data={waterfallData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
                                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                         <XAxis dataKey="name" tick={{ fontSize: 10, fontFamily: 'monospace', fill: '#64748b' }} interval={0} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} />
-                                        <YAxis tickFormatter={(val) => `${val.toFixed(1)}%`} tick={{ fontSize: 10, fontFamily: 'monospace', fill: '#64748b' }} axisLine={false} tickLine={false} />
+                                        <YAxis domain={waterfallDomain} tickFormatter={(val) => `${val.toFixed(1)}%`} tick={{ fontSize: 10, fontFamily: 'monospace', fill: '#64748b' }} axisLine={false} tickLine={false} />
                                         <Tooltip cursor={{ fill: '#f8fafc' }} content={({ active, payload }) => {
                                             if (active && payload && payload.length) {
                                                 const d = payload[0].payload;
@@ -429,64 +488,47 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
 
                         <div className="lg:col-span-4 flex flex-col md:gap-4 gap-4 h-full">
                             <div className="bg-white p-4 rounded-xl border border-wallstreet-700 shadow-sm flex-1 flex flex-col min-h-[220px]">
-                                <h3 className="font-mono font-bold text-wallstreet-text uppercase tracking-wider text-xs flex items-center gap-2 mb-2"><Scale size={14} className="text-wallstreet-500" /> Capital Efficiency</h3>
+                                <h3 className="font-mono font-bold text-wallstreet-text uppercase tracking-wider text-xs flex items-center gap-2 mb-2"><Scale size={14} className="text-wallstreet-500" /> Capital Efficiency (Top 10)</h3>
                                 <div className="flex-1 w-full">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <ScatterChart margin={{ top: 10, right: 10, bottom: 10, left: 0 }}>
                                             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                                            <XAxis type="number" dataKey="x" name="Weight" unit="%" tick={{ fontSize: 10 }} label={{ value: 'Weight %', position: 'bottom', offset: 0, fontSize: 10 }} />
-                                            <YAxis type="number" dataKey="y" name="Contrib" unit="%" tick={{ fontSize: 10 }} label={{ value: 'Contrib %', angle: -90, position: 'insideLeft', fontSize: 10 }} />
+                                            <XAxis type="number" dataKey="x" name="Weight" unit="%" tick={{ fontSize: 10 }} tickFormatter={(val: number) => `${val.toFixed(1)}`} label={{ value: 'Weight %', position: 'bottom', offset: 0, fontSize: 10 }} domain={[0, maxDomain]} allowDecimals={false} ticks={axisTicks} />
+                                            <YAxis type="number" dataKey="y" name="Share of Return" unit="%" tick={{ fontSize: 10 }} tickFormatter={(val: number) => `${val.toFixed(1)}`} label={{ value: 'Share of Return %', angle: -90, position: 'insideLeft', fontSize: 10 }} domain={[0, maxDomain]} allowDecimals={false} ticks={axisTicks} />
                                             <Tooltip cursor={{ strokeDasharray: '3 3' }} content={({ active, payload }) => {
                                                 if (active && payload && payload.length) {
                                                     const d = payload[0].payload;
                                                     return (
-                                                        <div className="bg-white text-black text-xs p-2 rounded shadow-xl font-mono border border-wallstreet-200 z-50">
-                                                            <div className="font-bold border-b border-wallstreet-200 pb-1 mb-1">{d.ticker}</div>
-                                                            <div>Weight: {d.x.toFixed(2)}%</div>
-                                                            <div>Contrib: {d.y.toFixed(2)}%</div>
+                                                        <div className="bg-white text-black text-xs p-2 rounded shadow-xl font-mono border border-wallstreet-200 z-50 min-w-[140px]">
+                                                            <div className="font-bold border-b border-wallstreet-200 pb-1 mb-2">{d.ticker}</div>
+                                                            <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+                                                                <span className="text-slate-500 font-medium text-left">Contrib:</span>
+                                                                <span className="text-right font-bold text-slate-700">
+                                                                    {d.absoluteContrib > 0 ? '+' : ''}{d.absoluteContrib.toFixed(2)}%
+                                                                </span>
+
+                                                                <span className="text-slate-500 font-medium text-left">Weight:</span>
+                                                                <span className="text-right font-bold text-slate-700">{d.x.toFixed(2)}%</span>
+
+                                                                <span className="text-slate-500 font-medium text-left">Share of Return %:</span>
+                                                                <span className={`text-right font-bold ${d.y < d.x ? 'text-red-600' : 'text-green-600'}`}>
+                                                                    {d.y.toFixed(2)}%
+                                                                </span>
+                                                            </div>
                                                         </div>
                                                     );
                                                 }
                                                 return null;
                                             }} />
-                                            <ReferenceLine segment={[{ x: 0, y: 0 }, { x: 10, y: 10 }]} stroke="#cbd5e1" strokeDasharray="3 3" />
+                                            {/* Horizontal Reference Line at 0 */}
+                                            <ReferenceLine y={0} stroke="#94a3b8" />
+                                            {/* Dynamic Reference Line 0,0 to max,max to show 1:1 efficiency ratio */}
+                                            <ReferenceLine segment={[{ x: 0, y: 0 }, { x: maxDomain, y: maxDomain }]} stroke="#94a3b8" strokeDasharray="3 3" />
                                             <Scatter name="Tickers" data={capitalEfficiencyData} fill="#0369a1">
                                                 {capitalEfficiencyData.map((entry, index) => (
                                                     <Cell key={`cell-${index}`} fill={entry.y > entry.x ? '#16a34a' : '#dc2626'} />
                                                 ))}
-                                            </Scatter>
-                                        </ScatterChart>
-                                    </ResponsiveContainer>
-                                </div>
-                            </div>
-
-                            <div className="bg-white p-4 rounded-xl border border-wallstreet-700 shadow-sm flex-1 flex flex-col min-h-[220px]">
-                                <h3 className="font-mono font-bold text-wallstreet-text uppercase tracking-wider text-xs flex items-center gap-2 mb-2"><Zap size={14} className="text-wallstreet-500" /> Risk vs. Return</h3>
-                                <div className="flex-1 w-full">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <ScatterChart margin={{ top: 10, right: 10, bottom: 10, left: 0 }}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                                            <XAxis type="number" dataKey="x" name="Risk" unit="" tick={{ fontSize: 10 }} label={{ value: 'Risk Contrib', position: 'bottom', offset: 0, fontSize: 10 }} />
-                                            <YAxis type="number" dataKey="y" name="Return" unit="%" tick={{ fontSize: 10 }} label={{ value: 'Return %', angle: -90, position: 'insideLeft', fontSize: 10 }} />
-                                            <Tooltip cursor={{ strokeDasharray: '3 3' }} content={({ active, payload }) => {
-                                                if (active && payload && payload.length) {
-                                                    const d = payload[0].payload;
-                                                    return (
-                                                        <div className="bg-white text-black text-xs p-2 rounded shadow-xl font-mono border border-wallstreet-200 z-50">
-                                                            <div className="font-bold border-b border-wallstreet-200 pb-1 mb-1">{d.ticker}</div>
-                                                            <div>Risk (Vol): {d.x.toFixed(2)}</div>
-                                                            <div>Return: {d.y.toFixed(2)}%</div>
-                                                        </div>
-                                                    );
-                                                }
-                                                return null;
-                                            }} />
-                                            <ReferenceLine y={0} stroke="#94a3b8" />
-                                            <ReferenceLine x={0} stroke="#94a3b8" />
-                                            <Scatter name="Tickers" data={riskReturnData} fill="#8884d8">
-                                                {riskReturnData.map((entry, index) => (
-                                                    <Cell key={`cell-${index}`} fill={entry.y > 0 ? '#16a34a' : '#dc2626'} />
-                                                ))}
+                                                <LabelList dataKey="ticker" position="top" style={{ fontSize: '10px', fontWeight: 'bold', fontFamily: 'monospace', fill: '#1e293b' }} offset={5} />
                                             </Scatter>
                                         </ScatterChart>
                                     </ResponsiveContainer>
@@ -496,7 +538,7 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
 
                         <div className="lg:col-span-3 bg-white p-4 rounded-xl border border-wallstreet-700 shadow-sm flex flex-col">
                             <div className="mb-2">
-                                <h3 className="font-mono font-bold text-wallstreet-text uppercase tracking-wider text-xs flex items-center gap-2"><Activity size={14} className="text-wallstreet-500" /> Impact (%)</h3>
+                                <h3 className="font-mono font-bold text-wallstreet-text uppercase tracking-wider text-xs flex items-center gap-2"><Activity size={14} className="text-wallstreet-500" /> Top Movers (%)</h3>
                             </div>
                             <div className="flex-1 w-full min-h-[200px] flex items-center justify-center">
                                 <ResponsiveContainer width="100%" height="100%">
@@ -561,17 +603,38 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
 
                                                 return (
                                                     <td key={date.toISOString()} className="p-0 border-b border-white relative group/cell">
-                                                        <div className="w-full h-10 flex items-center justify-center font-mono font-medium cursor-default transition-transform hover:scale-110 hover:z-20 hover:shadow-sm relative" style={{ backgroundColor: bg, color }}>
-                                                            {val !== null ? <span className="opacity-100">{val > 0 ? '+' : ''}{val.toFixed(2)}%</span> : <span className="text-gray-300">-</span>}
-                                                            {val !== null && (
-                                                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-slate-900 text-white text-[10px] rounded opacity-0 group-hover/cell:opacity-100 pointer-events-none z-30 whitespace-nowrap shadow-xl">{row.ticker}: {val.toFixed(2)}%</div>
-                                                            )}
-                                                        </div>
+                                                        {(() => {
+                                                            const maxW = row[`w-${date.getFullYear()}-${date.getMonth()}`];
+                                                            const isZeroVal = val !== null && Math.abs(val) < 0.0001;
+                                                            const isZeroWeight = maxW !== undefined && maxW < 0.0001;
+                                                            const showHyphen = val === null || (isZeroVal && isZeroWeight);
+
+                                                            // Adjust bg if showing hyphen to match "no data" style
+                                                            const displayBg = showHyphen ? '#f8fafc' : bg;
+
+                                                            return (
+                                                                <div className="w-full h-10 flex items-center justify-center font-mono font-medium cursor-default transition-transform hover:scale-110 hover:z-20 hover:shadow-sm relative" style={{ backgroundColor: displayBg, color }}>
+                                                                    {!showHyphen ? <span className="opacity-100">{val! > 0 ? '+' : ''}{val!.toFixed(2)}%</span> : <span className="text-gray-300">-</span>}
+                                                                    {!showHyphen && val !== null && (
+                                                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-slate-900 text-white text-[10px] rounded opacity-0 group-hover/cell:opacity-100 pointer-events-none z-30 whitespace-nowrap shadow-xl">{row.ticker}: {val!.toFixed(2)}%</div>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })()}
                                                     </td>
                                                 );
                                             })}
                                             <td className="p-3 text-right font-mono font-extrabold border-b border-wallstreet-100 border-l border-wallstreet-300 bg-gray-50/80 text-sm">
-                                                <span className={row.total >= 0 ? 'text-green-700' : 'text-red-700'}>{row.total > 0 ? '+' : ''}{row.total.toFixed(2)}%</span>
+                                                {(() => {
+                                                    const isZeroTotal = Math.abs(row.total) < 0.0001;
+                                                    const isZeroAvgWeight = (row.avgWeight || 0) < 0.0001;
+                                                    const showTotalHyphen = isZeroTotal && isZeroAvgWeight;
+
+                                                    if (showTotalHyphen) {
+                                                        return <span className="text-gray-300">-</span>;
+                                                    }
+                                                    return <span className={row.total >= 0 ? 'text-green-700' : 'text-red-700'}>{row.total > 0 ? '+' : ''}{row.total.toFixed(2)}%</span>;
+                                                })()}
                                             </td>
                                         </tr>
                                     ))}

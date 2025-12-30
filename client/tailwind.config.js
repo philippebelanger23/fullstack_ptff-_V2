@@ -8,22 +8,22 @@ export default {
         extend: {
             colors: {
                 wallstreet: {
-                    50: '#f8fafc',
-                    100: '#f1f5f9',
-                    200: '#e2e8f0',
-                    300: '#cbd5e1',
+                    50: 'var(--bg-main)',    // Using main bg as lightest for now, or could be distinct
+                    100: 'var(--bg-subtle)',
+                    200: 'var(--border-main)', // Use for borders
+                    300: '#cbd5e1',     // Keep some static slates if needed, or map to var
                     400: '#94a3b8',
-                    500: '#64748b',
+                    500: 'var(--text-muted)',
                     600: '#475569',
-                    700: '#334155',
-                    800: '#1e293b',
-                    900: '#0f172a', // Dark blue/slate base
+                    700: 'var(--border-main)', // Mapping legacy 700 usages (borders) to border var
+                    800: 'var(--bg-card)',     // Mapping legacy 800 usages (cards) to card var
+                    900: 'var(--bg-main)',     // Mapping legacy 900 usages (main bg) to main bg var
                     950: '#020617',
-                    text: '#f8fafc', // Light text for dark mode
-                    accent: '#3b82f6', // Bright blue
-                    danger: '#ef4444',
-                    success: '#22c55e',
-                    warning: '#eab308'
+                    text: 'var(--text-main)',
+                    accent: 'var(--accent-primary)',
+                    danger: 'var(--status-danger)',
+                    success: 'var(--status-success)',
+                    warning: 'var(--status-warning)'
                 }
             },
             fontFamily: {

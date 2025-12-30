@@ -3,7 +3,42 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    /* === THEME CONFIGURATION === */
+    /* Edit these values to change the app's look and feel */
+
+    /* Backgrounds */
+    --bg-main: #ffffff;
+    /* Main page background */
+    --bg-card: #f8fafc;
+    /* Card/Container background (Slate 50) */
+    --bg-subtle: #f1f5f9;
+    /* Subtle accents/hovers (Slate 100) */
+
+    /* Text */
+    --text-main: #0f172a;
+    /* Primary text (Slate 900) */
+    --text-muted: #64748b;
+    /* Secondary/Label text (Slate 500) */
+
+    /* Borders */
+    --border-main: #e2e8f0;
+    /* Default borders (Slate 200) */
+
+    /* Accents */
+    --accent-primary: #2563eb;
+    /* Main brand color (Blue 600) */
+    --accent-secondary: #0ea5e9;
+    /* Secondary brand color */
+
+    /* Status */
+    --status-success: #22c55e;
+    --status-warning: #eab308;
+    --status-danger: #ef4444;
+  }
+
   body {
-    @apply bg-wallstreet-900 text-wallstreet-text;
+    background-color: var(--bg-main);
+    color: var(--text-main);
   }
 }
