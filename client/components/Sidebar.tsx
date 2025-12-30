@@ -32,7 +32,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, hasData 
 
         <div onClick={() => hasData && setView(ViewState.DASHBOARD)} className={navItemClass(ViewState.DASHBOARD, !hasData)}>
           <PieChart size={20} />
-          <span className="font-medium">Exposure Map</span>
+          <span className="font-medium">Holdings </span>
         </div>
 
         <div onClick={() => setView(ViewState.INDEX)} className={navItemClass(ViewState.INDEX, false)}>

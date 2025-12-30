@@ -19,6 +19,7 @@ export const PortfolioTable: React.FC<PortfolioTableProps> = ({ currentHoldings 
         <table className="w-full text-left text-sm text-wallstreet-500">
           <thead className="bg-wallstreet-900 text-xs uppercase font-medium text-wallstreet-500 font-mono">
             <tr>
+              <th className="px-6 py-4 w-16 text-center">#</th>
               <th className="px-6 py-4">Ticker</th>
               <th className="px-6 py-4 text-right">Weight</th>
               <th className="px-6 py-4 text-center">Action</th>
@@ -28,6 +29,9 @@ export const PortfolioTable: React.FC<PortfolioTableProps> = ({ currentHoldings 
             {sortedData.map((item, index) => {
               return (
                 <tr key={index} className="hover:bg-wallstreet-900 transition-colors">
+                  <td className="px-6 py-4 text-center text-wallstreet-500 font-medium">
+                    {index + 1}
+                  </td>
                   <td className="px-6 py-4 font-bold text-wallstreet-text flex items-center gap-2">
                     <div className="w-8 h-8 rounded bg-wallstreet-700 text-wallstreet-text flex items-center justify-center text-xs">
                       {item.ticker.slice(0, 2)}

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { PortfolioItem } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList, ReferenceLine, ScatterChart, Scatter, ZAxis, ComposedChart, Line } from 'recharts';
+import { KPICard } from '../components/KPICard';
 import { TrendingUp, Target, AlertTriangle, Calendar, Grid, Activity, Percent, Layers, Zap, Scale } from 'lucide-react';
 
 interface AttributionViewProps {
@@ -27,21 +28,7 @@ const formatBps = (val: number | undefined) => {
 
 
 
-const KPICard = ({ title, value, subtext, icon: Icon, colorClass }: any) => (
-    <div className="bg-white p-5 rounded-xl border border-wallstreet-700 shadow-sm flex flex-col justify-between h-32 relative overflow-hidden group hover:shadow-md transition-shadow">
-        <div className="flex justify-between items-start z-10">
-            <div>
-                <h4 className="text-xs font-bold font-mono text-wallstreet-500 uppercase tracking-wider mb-1">{title}</h4>
-                <div className={`text-2xl font-bold font-mono ${colorClass}`}>{value}</div>
-            </div>
-            {Icon && (
-                <div className="p-2 bg-wallstreet-900 rounded-lg text-wallstreet-500 group-hover:text-wallstreet-accent transition-colors"><Icon size={18} /></div>
-            )}
-        </div>
-        <div className="z-10 mt-auto"><span className="text-[10px] font-mono text-wallstreet-500 bg-wallstreet-100 px-2 py-1 rounded inline-block">{subtext}</span></div>
-        {Icon && <Icon size={80} className="absolute -bottom-4 -right-4 text-wallstreet-100 opacity-20 transform -rotate-12 pointer-events-none" />}
-    </div>
-);
+// KPICard removed - imported from components
 
 const TornadoLabel = (props: any) => {
     const { x, y, width, height, value, payload } = props;
@@ -193,7 +180,7 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
         return uniqueTickers.map(ticker => {
             const history = filteredOverviewData.filter(d => d.ticker === ticker);
             const totalContrib = history.reduce((sum, item) => sum + (item.contribution || 0), 0);
-            const avgWeight = history.reduce((sum, item) => sum + item.weight, 0) / (history.length || 1);
+            // Removed avgWeight calculation as per user request
 
             // Calculate StdDev of *Contribution* (Risk Contribution Proxy) and *Return* (Standalone Risk)
             // Ideally we need Returns for Beta.
@@ -236,7 +223,7 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
             }, history[0]);
             const latestWeight = latestEntry ? latestEntry.weight : 0;
 
-            return { ticker, totalContrib, history, avgWeight, latestWeight, stdDevContrib, beta, riskScore: stdDevContrib };
+            return { ticker, totalContrib, history, latestWeight, stdDevContrib, beta, riskScore: stdDevContrib };
         });
     }, [uniqueTickers, filteredOverviewData, allMonths]);
 
@@ -257,7 +244,7 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
             const shareOfTotal = totalPortfolioContrib !== 0 ? (s.totalContrib / totalPortfolioContrib) : 0;
             return {
                 ticker: s.ticker,
-                x: s.avgWeight, // Weight %
+                x: s.latestWeight, // Use latestWeight explicitly for X-axis
                 y: shareOfTotal * 100, // Share of Total Return %
                 absoluteContrib: s.totalContrib,
                 z: 1
@@ -294,7 +281,7 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
     }, [capitalEfficiencyData]);
 
     const matrixData = sortedByContrib.map(stat => {
-        const row: any = { ticker: stat.ticker, total: stat.totalContrib, avgWeight: stat.avgWeight }; // Added avgWeight
+        const row: any = { ticker: stat.ticker, total: stat.totalContrib, latestWeight: stat.latestWeight }; // Use latestWeight explicitly
         allMonths.forEach(monthDate => {
             const m = monthDate.getMonth();
             const y = monthDate.getFullYear();
@@ -616,7 +603,9 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
                                                                 <div className="w-full h-10 flex items-center justify-center font-mono font-medium cursor-default transition-transform hover:scale-110 hover:z-20 hover:shadow-sm relative" style={{ backgroundColor: displayBg, color }}>
                                                                     {!showHyphen ? <span className="opacity-100">{val! > 0 ? '+' : ''}{val!.toFixed(2)}%</span> : <span className="text-gray-300">-</span>}
                                                                     {!showHyphen && val !== null && (
-                                                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-slate-900 text-white text-[10px] rounded opacity-0 group-hover/cell:opacity-100 pointer-events-none z-30 whitespace-nowrap shadow-xl">{row.ticker}: {val!.toFixed(2)}%</div>
+                                                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-3 py-2 bg-slate-900 text-white text-[10px] rounded opacity-0 group-hover/cell:opacity-100 pointer-events-none z-30 whitespace-nowrap shadow-xl flex flex-col items-center gap-1">
+                                                                            <div className="font-bold border-b-0 pb-0 mb-0">{row.ticker} - {date.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}</div>
+                                                                        </div>
                                                                     )}
                                                                 </div>
                                                             );
@@ -627,8 +616,8 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
                                             <td className="p-3 text-right font-mono font-extrabold border-b border-wallstreet-100 border-l border-wallstreet-300 bg-gray-50/80 text-sm">
                                                 {(() => {
                                                     const isZeroTotal = Math.abs(row.total) < 0.0001;
-                                                    const isZeroAvgWeight = (row.avgWeight || 0) < 0.0001;
-                                                    const showTotalHyphen = isZeroTotal && isZeroAvgWeight;
+                                                    const isZeroLatestWeight = (row.latestWeight || 0) < 0.0001; // Use latestWeight
+                                                    const showTotalHyphen = isZeroTotal && isZeroLatestWeight;
 
                                                     if (showTotalHyphen) {
                                                         return <span className="text-gray-300">-</span>;
