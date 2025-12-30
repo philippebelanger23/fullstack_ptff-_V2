@@ -2,28 +2,32 @@
 export default {
     content: [
         "./index.html",
-        "./**/*.{js,ts,jsx,tsx}",
+        "./App.tsx",
+        "./index.tsx",
+        "./components/**/*.{js,ts,jsx,tsx}",
+        "./views/**/*.{js,ts,jsx,tsx}",
+        "./services/**/*.{js,ts,jsx,tsx}",
     ],
     theme: {
         extend: {
             colors: {
                 wallstreet: {
-                    50: 'var(--bg-main)',    // Using main bg as lightest for now, or could be distinct
-                    100: 'var(--bg-subtle)',
-                    200: 'var(--border-main)', // Use for borders
-                    300: '#cbd5e1',     // Keep some static slates if needed, or map to var
-                    400: '#94a3b8',
-                    500: 'var(--text-muted)',
-                    600: '#475569',
-                    700: 'var(--border-main)', // Mapping legacy 700 usages (borders) to border var
-                    800: 'var(--bg-card)',     // Mapping legacy 800 usages (cards) to card var
-                    900: 'var(--bg-main)',     // Mapping legacy 900 usages (main bg) to main bg var
+                    50: 'var(--wallstreet-900)',    // Using main bg as lightest
+                    100: 'var(--wallstreet-900)',
+                    200: 'var(--wallstreet-700)',
+                    300: 'var(--wallstreet-600)',
+                    400: 'var(--wallstreet-500)',   // Mapping 400 to muted text color range
+                    500: 'var(--wallstreet-500)',
+                    600: 'var(--wallstreet-600)',
+                    700: 'var(--wallstreet-700)',
+                    800: 'var(--wallstreet-800)',
+                    900: 'var(--wallstreet-900)',
                     950: '#020617',
-                    text: 'var(--text-main)',
-                    accent: 'var(--accent-primary)',
-                    danger: 'var(--status-danger)',
-                    success: 'var(--status-success)',
-                    warning: 'var(--status-warning)'
+                    text: 'var(--wallstreet-text)',
+                    accent: 'var(--wallstreet-accent)',
+                    danger: 'var(--wallstreet-danger)',
+                    success: 'var(--wallstreet-success)',
+                    warning: 'var(--wallstreet-warning)'
                 }
             },
             fontFamily: {

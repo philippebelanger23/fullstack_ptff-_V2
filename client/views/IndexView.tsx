@@ -89,7 +89,7 @@ export const IndexView: React.FC = () => {
     }, [data]);
 
     const compositionData = [
-        { name: 'ACWI (Global USD)', value: 75, color: '#0369a1' },
+        { name: 'ACWI (Global USD)', value: 75, color: '#004dea' },
         { name: 'HXT.TO (TSX 60 CAD)', value: 25, color: '#dc2626' },
     ];
 
@@ -189,7 +189,7 @@ export const IndexView: React.FC = () => {
                                     <Legend wrapperStyle={{ fontSize: '11px', fontFamily: 'monospace' }} />
                                     <Bar dataKey="ACWI" name="ACWI" fill="#94a3b8" stackId="a" barSize={8} />
                                     <Bar dataKey="TSX" name="TSX" fill="#dc2626" stackId="b" barSize={8} />
-                                    <Bar dataKey="Index" name="75/25 Index" fill="#0369a1" radius={[0, 4, 4, 0]} barSize={12} />
+                                    <Bar dataKey="Index" name="75/25 Index" fill="#004dea" radius={[0, 4, 4, 0]} barSize={12} />
                                 </BarChart>
                             </ResponsiveContainer>
                         </div>

@@ -353,7 +353,7 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
             currentVal = end;
         }
 
-        dataPoints.push({ name: 'Total', value: [0, currentVal], delta: currentVal, isTotal: true, color: '#0369a1' });
+        dataPoints.push({ name: 'Total', value: [0, currentVal], delta: currentVal, isTotal: true, color: '#004dea' });
         return dataPoints;
     }, [sortedByWeight]);
 
@@ -511,7 +511,7 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
                                             <ReferenceLine y={0} stroke="#94a3b8" />
                                             {/* Dynamic Reference Line 0,0 to max,max to show 1:1 efficiency ratio */}
                                             <ReferenceLine segment={[{ x: 0, y: 0 }, { x: maxDomain, y: maxDomain }]} stroke="#94a3b8" strokeDasharray="3 3" />
-                                            <Scatter name="Tickers" data={capitalEfficiencyData} fill="#0369a1">
+                                            <Scatter name="Tickers" data={capitalEfficiencyData} fill="#004dea">
                                                 {capitalEfficiencyData.map((entry, index) => (
                                                     <Cell key={`cell-${index}`} fill={entry.y > entry.x ? '#16a34a' : '#dc2626'} />
                                                 ))}

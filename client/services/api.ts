@@ -1,6 +1,6 @@
 import { PortfolioItem } from '../types';
 
-const API_Base_URL = 'http://localhost:8000';
+const API_Base_URL = ''; // Use relative path to leverage Vite proxy
 
 export const analyzePortfolio = async (weightsFile: File, navFile?: File): Promise<PortfolioItem[]> => {
     const formData = new FormData();

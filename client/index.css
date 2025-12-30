@@ -7,34 +7,41 @@
     /* === THEME CONFIGURATION === */
     /* Edit these values to change the app's look and feel */
 
-    /* Backgrounds */
-    --bg-main: #ffffff;
-    /* Main page background */
-    --bg-card: #f8fafc;
-    /* Card/Container background (Slate 50) */
-    --bg-subtle: #f1f5f9;
-    /* Subtle accents/hovers (Slate 100) */
+    /* -- PAGE FUNDAMENTALS -- */
+    --wallstreet-900: #f1f5f9;
+    /* [Main Background]: The global background color behind everything. */
+    --wallstreet-800: #ffffff;
+    /* [Card Background]: The white background for charts, sidebars, and data tables. */
+    --wallstreet-700: #e2e8f0;
+    /* [Borders & Dividers]: Used for thin lines between sections and table rows. */
 
-    /* Text */
-    --text-main: #0f172a;
-    /* Primary text (Slate 900) */
-    --text-muted: #64748b;
-    /* Secondary/Label text (Slate 500) */
+    /* -- INTERACTIVE ELEMENTS -- */
+    --wallstreet-600: #cbd5e1;
+    /* [Disabled/Secondary]: Used for disabled buttons or less important icons. */
+    --wallstreet-accent: #4773cb9d;
+    /* [Primary Brand Color]: Main buttons, active tabs, and key call-to-actions. */
 
-    /* Borders */
-    --border-main: #e2e8f0;
-    /* Default borders (Slate 200) */
+    /* -- TEXT CONTROLS -- */
+    --wallstreet-text: #0f172a;
+    /* [Primary Text]: Main headings, body text, and table data. High contrast. */
+    --wallstreet-500: #64748b;
+    /* [Muted Text]: Subtitles, helper text, and less important labels. */
 
-    /* Accents */
-    --accent-primary: #2563eb;
-    /* Main brand color (Blue 600) */
-    --accent-secondary: #0ea5e9;
-    /* Secondary brand color */
+    /* -- STATUS INDICATORS -- */
+    --wallstreet-danger: #dc2626;
+    /* [Error/Negative]: Negative returns, delete buttons, error messages. */
+    --wallstreet-success: #16a34a;
+    /* [Success/Positive]: Positive returns, success badges (Green). */
+    --wallstreet-warning: #eab308;
+    /* [Warning]: Alerts that need attention but aren't critical (Yellow). */
 
-    /* Status */
-    --status-success: #22c55e;
-    --status-warning: #eab308;
-    --status-danger: #ef4444;
+    /* Legacy Mappings (for compatibility) */
+    --bg-main: var(--wallstreet-900);
+    --bg-card: var(--wallstreet-800);
+    --bg-subtle: var(--wallstreet-900);
+    --text-main: var(--wallstreet-text);
+    --border-main: var(--wallstreet-700);
+    --accent-primary: var(--wallstreet-accent);
   }
 
   body {
