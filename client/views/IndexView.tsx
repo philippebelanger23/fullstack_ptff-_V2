@@ -76,40 +76,50 @@ export const IndexView: React.FC = () => {
 
     // Calculate currency exposure from geography data
     const currencyExposure = React.useMemo(() => {
-        if (exposure.geography.length === 0) return { USD: 0, CAD: 0, EUR: 0, JPY: 0, GBP: 0, Other: 0 };
+        if (exposure.geography.length === 0) return [];
 
-        let usd = 0;
-        let cad = 0;
-        let eur = 0;
-        let jpy = 0;
-        let gbp = 0;
-        let other = 0;
+        const currencyMap: Record<string, string> = {
+            'United States': 'USD',
+            'Canada': 'CAD',
+            'Japan': 'JPY',
+            'United Kingdom': 'GBP',
+            'France': 'EUR',
+            'Germany': 'EUR',
+            'Netherlands': 'EUR',
+            'Switzerland': 'CHF',
+            'Australia': 'AUD',
+            'China': 'CNY',
+            'Taiwan': 'TWD',
+            'India': 'INR'
+        };
 
-        // List of Eurozone countries for simple mapping
-        const eurozone = ['France', 'Germany', 'Netherlands', 'Spain', 'Italy', 'Ireland', 'Belgium', 'Finland'];
+        const totals: Record<string, number> = {};
 
         exposure.geography.forEach(g => {
-            const region = g.region;
-            if (region === 'United States') {
-                usd += g.weight;
-            } else if (region === 'Canada') {
-                cad += g.weight;
-            } else if (region === 'Japan') {
-                jpy += g.weight;
-            } else if (region === 'United Kingdom') {
-                gbp += g.weight;
-            } else if (eurozone.includes(region)) {
-                eur += g.weight;
-            } else {
-                other += g.weight;
-            }
+            const curr = currencyMap[g.region] || 'Other';
+            totals[curr] = (totals[curr] || 0) + g.weight;
         });
 
-        return { USD: usd, CAD: cad, EUR: eur, JPY: jpy, GBP: gbp, Other: other };
-    }, [exposure.geography]);
+        // Convert to array and sort
+        const sorted = Object.entries(totals)
+            .map(([code, weight]) => ({ code, weight }))
+            .sort((a, b) => b.weight - a.weight);
 
-    // Check if total matches 100 roughly
-    const totalCurrency = Object.values(currencyExposure).reduce((a, b) => a + b, 0);
+        // Always keep USD and CAD at the top if they exist (or just rely on sort if they are big)
+        // User asked to break out next top 2.
+        // We will return top 4 currencies + Other
+
+        const topCurrencies = sorted.filter(c => c.code !== 'Other').slice(0, 4);
+        const otherWeight = sorted
+            .filter(c => c.code === 'Other' || !topCurrencies.includes(c))
+            .reduce((sum, c) => sum + c.weight, 0);
+
+        if (otherWeight > 0.01) {
+            topCurrencies.push({ code: 'Other', weight: otherWeight });
+        }
+
+        return topCurrencies;
+    }, [exposure.geography]);
 
     if (loading) {
         return (
@@ -120,9 +130,9 @@ export const IndexView: React.FC = () => {
     }
 
     return (
-        <div className="w-full max-w-[98vw] mx-auto p-6 space-y-6 animate-in fade-in duration-500 pb-20">
+        <div className="w-full max-w-[100vw] mx-auto p-6 space-y-8 animate-in fade-in duration-500 pb-20 overflow-x-hidden">
 
-            <div className="border-b border-wallstreet-700 pb-6 mb-8">
+            <div className="border-b border-wallstreet-700 pb-6">
                 <div className="flex justify-between items-start">
                     <div>
                         <h2 className="text-3xl font-bold font-mono text-wallstreet-text flex items-center gap-3"><Globe className="text-wallstreet-accent" /> Global 75/25 Index</h2>
@@ -131,10 +141,9 @@ export const IndexView: React.FC = () => {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-stretch">
-                {/* Sector Chart - Takes 7/12 width */}
-                <div className="xl:col-span-8 bg-white p-6 rounded-xl border border-wallstreet-700 shadow-sm flex flex-col h-[600px]">
-                    <div className="flex justify-between items-center mb-4 flex-shrink-0">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-2 bg-white p-6 rounded-xl border border-wallstreet-700 shadow-sm flex flex-col h-[500px]">
+                    <div className="flex justify-between items-center mb-6">
                         <div>
                             <h3 className="text-lg font-bold font-mono text-wallstreet-text">Sector & Factor Exposure</h3>
                             <p className="text-xs text-wallstreet-500">Real allocation data scraped from iShares/BlackRock (as of Dec 30, 2025).</p>
@@ -145,17 +154,21 @@ export const IndexView: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Sunburst Chart - Takes 5/12 width */}
-                <div className="xl:col-span-4 bg-white p-6 rounded-xl border border-wallstreet-700 shadow-sm flex flex-col h-[600px]">
-                    <h3 className="text-lg font-bold font-mono text-wallstreet-text mb-2 flex-shrink-0">Geographic Breakdown</h3>
+                <div className="bg-white p-6 rounded-xl border border-wallstreet-700 shadow-sm flex flex-col h-[500px]">
+                    <h3 className="text-lg font-bold font-mono text-wallstreet-text mb-2">Geographic Breakdown</h3>
                     <div className="flex-1 w-full relative min-h-0">
                         <SunburstChart data={sunburstData} />
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none pb-12">
+                            <div className="text-center">
+                                {/* Center content now handled by inner labels */}
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
 
             <div className="space-y-6">
-                <h2 className="text-xl font-bold font-mono text-wallstreet-text border-b border-wallstreet-700 pb-2 flex items-center gap-2 mt-8"><Zap size={20} className="text-wallstreet-accent" /> Geographic & Currency Breakdown</h2>
+                <h2 className="text-xl font-bold font-mono text-wallstreet-text border-b border-wallstreet-700 pb-2 flex items-center gap-2"><Zap size={20} className="text-wallstreet-accent" /> Geographic & Currency Breakdown</h2>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     <div className="bg-white p-6 rounded-xl border border-wallstreet-700 shadow-sm flex flex-col">
@@ -163,12 +176,12 @@ export const IndexView: React.FC = () => {
                             <h3 className="text-lg font-bold font-mono text-wallstreet-text flex items-center gap-2"><MapIcon size={18} /> Regional Allocation</h3>
                             <p className="text-xs text-wallstreet-500">Composite geographic exposure from underlying ETFs.</p>
                         </div>
-                        <div className="flex-1 overflow-auto max-h-[500px]">
+                        <div className="flex-1 overflow-auto">
                             <table className="w-full text-sm font-mono">
-                                <thead className="bg-wallstreet-100 text-wallstreet-500 text-xs uppercase sticky top-0">
+                                <thead className="bg-wallstreet-100 text-wallstreet-500 text-xs uppercase">
                                     <tr>
-                                        <th className="p-2 text-left bg-wallstreet-100">Region</th>
-                                        <th className="p-2 text-right bg-wallstreet-100">Weight</th>
+                                        <th className="p-2 text-left">Region</th>
+                                        <th className="p-2 text-right">Weight</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -186,38 +199,21 @@ export const IndexView: React.FC = () => {
                     <div className="bg-white p-6 rounded-xl border border-wallstreet-700 shadow-sm flex flex-col">
                         <div className="mb-4">
                             <h3 className="text-lg font-bold font-mono text-wallstreet-text flex items-center gap-2"><DollarSign size={18} /> Currency Exposure</h3>
-                            <p className="text-xs text-wallstreet-500">Derived from geographic allocation. (Sum: {totalCurrency.toFixed(2)}%)</p>
+                            <p className="text-xs text-wallstreet-500">Derived from geographic allocation.</p>
                         </div>
                         <div className="flex-1">
                             <ul className="space-y-4 text-sm font-mono">
-                                <li className="flex justify-between items-center border-b border-wallstreet-200 pb-3">
-                                    <div className="flex items-center gap-2"><Globe size={14} className="text-blue-700" /><span className="font-medium">USD (United States)</span></div>
-                                    <span className="font-bold text-blue-700 text-lg">{currencyExposure.USD.toFixed(2)}%</span>
-                                </li>
-                                <li className="flex justify-between items-center border-b border-wallstreet-200 pb-3">
-                                    <div className="flex items-center gap-2"><Globe size={14} className="text-red-700" /><span className="font-medium">CAD (Canada)</span></div>
-                                    <span className="font-bold text-red-700 text-lg">{currencyExposure.CAD.toFixed(2)}%</span>
-                                </li>
-                                <li className="flex justify-between items-center border-b border-wallstreet-200 pb-3">
-                                    <div className="flex items-center gap-2"><Globe size={14} className="text-indigo-600" /><span className="font-medium">EUR (Eurozone)</span></div>
-                                    <span className="font-bold text-indigo-600 text-lg">{currencyExposure.EUR.toFixed(2)}%</span>
-                                </li>
-                                <li className="flex justify-between items-center border-b border-wallstreet-200 pb-3">
-                                    <div className="flex items-center gap-2"><Globe size={14} className="text-rose-600" /><span className="font-medium">JPY (Japan)</span></div>
-                                    <span className="font-bold text-rose-600 text-lg">{currencyExposure.JPY.toFixed(2)}%</span>
-                                </li>
-                                <li className="flex justify-between items-center border-b border-wallstreet-200 pb-3">
-                                    <div className="flex items-center gap-2"><Globe size={14} className="text-purple-600" /><span className="font-medium">GBP (United Kingdom)</span></div>
-                                    <span className="font-bold text-purple-600 text-lg">{currencyExposure.GBP.toFixed(2)}%</span>
-                                </li>
-                                <li className="flex justify-between items-center">
-                                    <span className="font-medium text-slate-500">Other (Emerging / Pacific)</span>
-                                    <span className="font-bold text-slate-600 text-lg">{currencyExposure.Other.toFixed(2)}%</span>
-                                </li>
+                                {currencyExposure.map((c) => (
+                                    <li key={c.code} className="flex justify-between items-center border-b border-wallstreet-200 pb-3 last:border-0">
+                                        <span className="font-medium">{c.code} Exposure</span>
+                                        <span className={`font-bold text-lg ${c.code === 'USD' ? 'text-blue-700' : c.code === 'CAD' ? 'text-red-700' : 'text-slate-700'}`}>
+                                            {c.weight.toFixed(2)}%
+                                        </span>
+                                    </li>
+                                ))}
                             </ul>
-                            <div className="mt-8 p-3 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800 leading-relaxed">
-                                <strong>Methodology:</strong> Currency exposure is approximated by mapping geographic regions to their primary currency.
-                                "Other" includes China (CNY), Switzerland (CHF), India (INR), Taiwan (TWD) and remaining global markets.
+                            <div className="mt-6 p-3 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800 leading-relaxed">
+                                <strong>Note:</strong> Currency exposure is derived from the geographic allocation. ACWI's ~64% US allocation combined with 75% ACWI weight means approximately {(0.75 * 64.06).toFixed(1)}% of the index is USD-denominated.
                             </div>
                         </div>
                     </div>

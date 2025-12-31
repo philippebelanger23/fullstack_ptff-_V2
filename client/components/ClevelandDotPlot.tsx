@@ -36,7 +36,8 @@ export const ClevelandDotPlot: React.FC<DotPlotProps> = ({ data }) => {
             range: [Math.min(item.ACWI, item.TSX), Math.max(item.ACWI, item.TSX)]
         }));
 
-    // Sort by Index weight descending for better readability
+    // Sort by Index weight descending
+    // Ensure we are sorting by 'Index' field (Composite weight)
     const sortedData = [...chartData].sort((a, b) => (b.Index || 0) - (a.Index || 0));
 
     return (
@@ -46,7 +47,7 @@ export const ClevelandDotPlot: React.FC<DotPlotProps> = ({ data }) => {
                 data={sortedData}
                 margin={{ top: 10, right: 10, left: 0, bottom: 0 }} // Minimal margins
             >
-                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={true} stroke="#f1f5f9" strokeOpacity={0.5} />
+                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={true} stroke="#f1f5f9" strokeOpacity={0.4} />
                 <XAxis type="number" domain={[0, 'auto']} unit="%" tick={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 'bold', fill: '#00000e' }} />
                 <YAxis
                     type="category"

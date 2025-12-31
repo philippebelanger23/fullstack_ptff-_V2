@@ -79,8 +79,8 @@ export const SunburstChart: React.FC<SunburstChartProps> = ({ data, width = "100
                     dataKey="value"
                     cx="50%"
                     cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
+                    innerRadius={70}
+                    outerRadius={128}
                     stroke="#fff"
                     strokeWidth={2}
                     labelLine={false}
@@ -96,8 +96,8 @@ export const SunburstChart: React.FC<SunburstChartProps> = ({ data, width = "100
                     dataKey="value"
                     cx="50%"
                     cy="50%"
-                    innerRadius={102}
-                    outerRadius={180}
+                    innerRadius={130}
+                    outerRadius={210}
                     stroke="#fff"
                     strokeWidth={2}
                     labelLine={false}
