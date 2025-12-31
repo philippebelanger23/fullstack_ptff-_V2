@@ -1,0 +1,50 @@
+{
+    "ACWI": {
+        "Sectors": {
+            "Information Technology": 27.19,
+            "Financials": 17.55,
+            "Industrials": 10.64,
+            "Consumer Discretionary": 10.21,
+            "Health Care": 9.02,
+            "Communication": 8.81,
+            "Consumer Staples": 5.08,
+            "Materials": 3.66,
+            "Energy": 3.38,
+            "Utilities": 2.54,
+            "Real Estate": 1.75,
+            "Cash and/or Derivatives": 0.18
+        },
+        "Geography": {
+            "United States": 64.06,
+            "Japan": 4.83,
+            "United Kingdom": 3.26,
+            "Canada": 3.05,
+            "China": 3.04,
+            "France": 2.34,
+            "Taiwan": 2.22,
+            "Germany": 2.12,
+            "Switzerland": 2.11,
+            "India": 1.65,
+            "Korea (South)": 1.45,
+            "Australia": 1.40
+        }
+    },
+    "TSX": {
+        "Sectors": {
+            "Financials": 38.95,
+            "Energy": 15.06,
+            "Materials": 13.77,
+            "Information Technology": 11.56,
+            "Industrials": 8.16,
+            "Consumer Staples": 3.70,
+            "Consumer Discretionary": 3.58,
+            "Utilities": 2.61,
+            "Communication": 2.12,
+            "Real Estate": 0.24,
+            "Cash and/or Derivatives": 0.23
+        },
+        "Geography": {
+            "Canada": 100.0
+        }
+    }
+}

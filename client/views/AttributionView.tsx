@@ -353,7 +353,7 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
             currentVal = end;
         }
 
-        dataPoints.push({ name: 'Total', value: [0, currentVal], delta: currentVal, isTotal: true, color: '#004dea' });
+        dataPoints.push({ name: 'Total', value: [0, currentVal], delta: currentVal, isTotal: true, color: '#0A2351' });
         return dataPoints;
     }, [sortedByWeight]);
 

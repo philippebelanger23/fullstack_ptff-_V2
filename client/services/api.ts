@@ -28,3 +28,64 @@ export const analyzePortfolio = async (weightsFile: File, navFile?: File): Promi
         throw error;
     }
 };
+
+// Cache storage
+let sectorCache: Record<string, string> = {};
+let indexExposureCache: { sectors: any[], geography: any[] } | null = null;
+
+export const fetchSectors = async (tickers: string[]): Promise<Record<string, string>> => {
+    // 1. Filter out tickers we already have in cache
+    const missingTickers = tickers.filter(ticker => !sectorCache[ticker]);
+
+    // 2. Fetch only missing tickers
+    if (missingTickers.length > 0) {
+        try {
+            const response = await fetch(`${API_Base_URL}/fetch-sectors`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ tickers: missingTickers }),
+            });
+
+            if (response.ok) {
+                const newSectors = await response.json();
+                // 3. Update cache
+                sectorCache = { ...sectorCache, ...newSectors };
+            } else {
+                console.error('Failed to fetch sectors');
+            }
+        } catch (error) {
+            console.error("Error fetching sectors:", error);
+        }
+    }
+
+    // 4. Return all requested sectors from cache (existing + new)
+    const result: Record<string, string> = {};
+    tickers.forEach(ticker => {
+        if (sectorCache[ticker]) {
+            result[ticker] = sectorCache[ticker];
+        }
+    });
+
+    return result;
+};
+
+export const fetchIndexExposure = async (): Promise<{ sectors: any[], geography: any[] }> => {
+    // Return cached data if available
+    if (indexExposureCache) {
+        return indexExposureCache;
+    }
+
+    try {
+        const response = await fetch(`${API_Base_URL}/index-exposure`);
+        if (!response.ok) throw new Error("Failed to fetch index exposure");
+
+        // Cache the result
+        indexExposureCache = await response.json();
+        return indexExposureCache!;
+    } catch (error) {
+        console.error("Error fetching index exposure:", error);
+        return { sectors: [], geography: [] };
+    }
+};

@@ -149,6 +149,116 @@ async def analyze_portfolio(
         if temp_dir.exists():
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+@app.post("/fetch-sectors")
+async def fetch_sectors(request: dict):
+    tickers = request.get("tickers", [])
+    if not tickers:
+        return {}
+    
+    import yfinance as yf
+    
+    unique_tickers = list(set([t.strip() for t in tickers if t and isinstance(t, str)]))
+    try:
+        # yf.Tickers allows batch processing but getting info is sometimes better individually for reliability
+        # or we use the Tickers object.
+        # Let's try batch fetching info if possible, but yfinance is tricky with batch info.
+        # Actually, iterating is safer for 'info' attribute reliability.
+        
+        sector_map = {}
+        # Optimization: Filter out known non-equity patterns first to save API calls
+        # (Though yfinance handles them, it's faster to skip)
+        
+        # We can use Tickers object for multi-threading
+        tickers_obj = yf.Tickers(" ".join(unique_tickers))
+        
+        for ticker in unique_tickers:
+            try:
+                # Accessing info triggers the download
+                info = tickers_obj.tickers[ticker].info
+                sector = info.get('sector')
+                
+                # Check for ETF/Fund indicators if sector is missing
+                if not sector:
+                    quote_type = info.get('quoteType', '').upper()
+                    if quote_type in ['ETF', 'MUTUALFUND']:
+                        sector = 'Mixed'
+                
+                if sector:
+                    sector_map[ticker] = sector
+            except Exception as e:
+                logger.warning(f"Failed to fetch info for {ticker}: {e}")
+                
+        return sector_map
+        
+    except Exception as e:
+        logger.error(f"Error fetching sectors: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/index-exposure")
+async def get_index_exposure():
+    try:
+        import json
+        data_path = Path("data/index_exposure.json")
+        if not data_path.exists():
+            logger.error(f"index_exposure.json not found at {data_path.absolute()}")
+            return {"sectors": [], "geography": []}
+            
+        with open(data_path, "r") as f:
+            raw_data = json.load(f)
+            
+        acwi = raw_data.get("ACWI", {})
+        tsx = raw_data.get("TSX", {})
+        
+        # --- Sector Composition ---
+        all_sectors = set(acwi.get("Sectors", {}).keys()) | set(tsx.get("Sectors", {}).keys())
+        
+        sector_list = []
+        for sector in all_sectors:
+            w_acwi = acwi.get("Sectors", {}).get(sector, 0.0)
+            w_tsx = tsx.get("Sectors", {}).get(sector, 0.0)
+            
+            w_composite = (w_acwi * 0.75) + (w_tsx * 0.25)
+            
+            if w_composite > 0.01:
+                sector_list.append({
+                    "sector": sector,
+                    "ACWI": w_acwi,
+                    "TSX": w_tsx,
+                    "Index": round(w_composite, 2)
+                })
+            
+        sector_list.sort(key=lambda x: x["Index"], reverse=True)
+        
+        # --- Geography Composition ---
+        all_regions = set(acwi.get("Geography", {}).keys()) | set(tsx.get("Geography", {}).keys())
+        
+        geo_list = []
+        for region in all_regions:
+            w_acwi = acwi.get("Geography", {}).get(region, 0.0)
+            w_tsx = tsx.get("Geography", {}).get(region, 0.0)
+            
+            w_composite = (w_acwi * 0.75) + (w_tsx * 0.25)
+            
+            if w_composite > 0.01:
+                geo_list.append({
+                    "region": region,
+                    "weight": round(w_composite, 2)
+                })
+                
+        geo_list.sort(key=lambda x: x["weight"], reverse=True)
+            
+        return {
+            "sectors": sector_list,
+            "geography": geo_list,
+            "raw": {
+                "ACWI": {"Geography": acwi.get("Geography", {})},
+                "TSX": {"Geography": tsx.get("Geography", {})}
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error in index-exposure: {e}")
+        return {"sectors": [], "geography": []}
+
 if __name__ == "__main__":
     import uvicorn
     import sys

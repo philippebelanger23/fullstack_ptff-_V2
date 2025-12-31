@@ -37,7 +37,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, hasData 
 
         <div onClick={() => setView(ViewState.INDEX)} className={navItemClass(ViewState.INDEX, false)}>
           <Globe size={20} />
-          <span className="font-medium">Index Strategy (DUMMY)</span>
+          <span className="font-medium">Index Breakdown</span>
         </div>
 
         <div onClick={() => hasData && setView(ViewState.ATTRIBUTION)} className={navItemClass(ViewState.ATTRIBUTION, !hasData)}>

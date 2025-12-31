@@ -287,7 +287,7 @@ export const UploadView: React.FC<UploadViewProps> = ({ onDataLoaded, onProceed,
               const row = rawRows[r];
               if (!row[tickerIdx]) continue;
               parsedItems.push({
-                ticker: String(row[tickerIdx]),
+                ticker: String(row[tickerIdx]).trim(),
                 weight: cleanNumber(row[weightIdx]),
                 date: dateIdx !== -1 ? parseDate(row[dateIdx]) : new Date().toISOString().split('T')[0],
                 returnPct: returnIdx !== -1 ? cleanNumber(row[returnIdx]) : undefined,

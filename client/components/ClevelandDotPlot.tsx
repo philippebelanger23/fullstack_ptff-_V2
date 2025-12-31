@@ -1,0 +1,104 @@
+import React from 'react';
+import {
+    ComposedChart,
+    Bar,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    Legend,
+    ResponsiveContainer,
+    Scatter,
+    Rectangle
+} from 'recharts';
+
+interface DotPlotProps {
+    data: any[];
+}
+
+export const ClevelandDotPlot: React.FC<DotPlotProps> = ({ data }) => {
+    // Map of raw sector names to user-preferred display names
+    const sectorMap: Record<string, string> = {
+        "Information Technology": "Technology",
+        "Consumer Discretionary": "Cons. Disc.",
+        "Consumer Staples": "Cons.Staples",
+        "Communication": "Communication", // Already matches or close enough
+        "Communication Services": "Communication", // Handle potential variation
+    };
+
+    // Transform data: Map names, filter Cash, calculate range
+    const chartData = data
+        .filter(item => !item.sector.includes("Cash")) // Drop Cash/Derivatives
+        .map(item => ({
+            ...item,
+            // Use mapped name if exists, else match raw name (handle slight variations if needed)
+            displaySector: sectorMap[item.sector] || item.sector,
+            range: [Math.min(item.ACWI, item.TSX), Math.max(item.ACWI, item.TSX)]
+        }));
+
+    // Sort by Index weight descending for better readability
+    const sortedData = [...chartData].sort((a, b) => (b.Index || 0) - (a.Index || 0));
+
+    return (
+        <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart
+                layout="vertical"
+                data={sortedData}
+                margin={{ top: 10, right: 10, left: 0, bottom: 0 }} // Minimal margins
+            >
+                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={true} stroke="#f1f5f9" strokeOpacity={0.5} />
+                <XAxis type="number" domain={[0, 'auto']} unit="%" tick={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 'bold', fill: '#00000e' }} />
+                <YAxis
+                    type="category"
+                    dataKey="displaySector"
+                    width={95} // Tighter fit for shorter names
+                    tick={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 'bold', fill: '#00000e' }}
+                />
+                <Tooltip
+                    cursor={{ fill: '#f8fafc', opacity: 0.5 }}
+                    contentStyle={{ backgroundColor: '#fff', color: '#000', border: '1px solid #e2e8f0', borderRadius: '8px' }}
+                    itemStyle={{ fontFamily: 'monospace', fontSize: '12px' }}
+                    formatter={(value: number | number[] | string, name: string) => {
+                        if (Array.isArray(value)) return null;
+                        if (name === 'displaySector' || name === 'range' || name === 'sector') return null;
+                        const numVal = Number(value);
+                        if (isNaN(numVal)) return null;
+                        return [`${numVal.toFixed(2)}%`, name];
+                    }}
+                    labelStyle={{ fontWeight: 'bold', marginBottom: '8px' }}
+                />
+                <Legend
+                    verticalAlign="top"
+                    align="right"
+                    height={30}
+                    iconSize={10}
+                    wrapperStyle={{ fontSize: '11px', fontFamily: 'monospace', top: -5 }}
+                />
+
+                {/* Connector Line (The Bar) */}
+                {/* We use a Bar with a custom shape or just standard if range is supported properly in this version.
+                    Recharts standard Bar with [min, max] works.
+                    We make it visually subtle (gray or theme color)
+                */}
+                <Bar
+                    dataKey="range"
+                    fill="#cbd5e1" // Slate-300
+                    barSize={2} // Very thin to look like a line
+                    legendType="none" // Hide from legend
+                    isAnimationActive={false}
+                    radius={[2, 2, 2, 2]} // Rounded ends
+                />
+
+                {/* ACWI Dot */}
+                <Scatter name="ACWI (75%)" dataKey="ACWI" fill="#94a3b8" shape="circle" />
+
+                {/* TSX Dot */}
+                <Scatter name="XIU.TO (25%)" dataKey="TSX" fill="#dc2626" shape="circle" />
+
+                {/* Index Triangle */}
+                <Scatter name="75/25 Composite" dataKey="Index" fill="#004dea" shape="triangle" />
+
+            </ComposedChart>
+        </ResponsiveContainer>
+    );
+};
