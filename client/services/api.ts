@@ -105,3 +105,25 @@ export const fetchIndexExposure = async (): Promise<{ sectors: any[], geography:
         return { sectors: [], geography: [] };
     }
 };
+
+export const fetchCurrencyPerformance = async (tickers: string[]): Promise<Record<string, Record<string, number>>> => {
+    try {
+        const response = await fetch(`${API_Base_URL}/fetch-performance`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ tickers }),
+        });
+
+        if (response.ok) {
+            return await response.json();
+        } else {
+            console.error('Failed to fetch currency performance');
+            return {};
+        }
+    } catch (error) {
+        console.error("Error fetching currency performance:", error);
+        return {};
+    }
+};

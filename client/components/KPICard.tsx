@@ -3,7 +3,7 @@ import { LucideIcon } from 'lucide-react';
 
 interface KPICardProps {
     title: string;
-    value: string | number;
+    value: string | number | React.ReactNode;
     subtext: string;
     icon?: LucideIcon | null;
     colorClass?: string;

@@ -221,6 +221,110 @@ async def fetch_sectors(request: dict):
     # Return requested sectors from the (now updated) server cache
     return {k: server_cache[k] for k in unique_tickers if k in server_cache}
 
+@app.post("/fetch-performance")
+async def fetch_performance(request: dict):
+    tickers = request.get("tickers", [])
+    if not tickers:
+        return {}
+    
+    import yfinance as yf
+    import datetime
+    from dateutil.relativedelta import relativedelta
+    
+    unique_tickers = list(set([t.strip() for t in tickers if t and isinstance(t, str)]))
+    results = {}
+
+    try:
+        # Group fetching
+        tickers_obj = yf.Tickers(" ".join(unique_tickers))
+        
+        # Calculate start dates for different periods
+        today = datetime.date.today()
+        start_date_1y = today - relativedelta(years=1)
+        
+        # We need roughly 1 year of data to calculate all metrics
+        # Fetching a bit more to be safe
+        
+        for ticker in unique_tickers:
+            try:
+                # Get historical data
+                # period="1y" might miss the exact start day if it's a weekend, so using "2y" or explicit dates is safer
+                # but "1y" + "ytd" is usually enough. Let's use max necessary period.
+                hist = tickers_obj.tickers[ticker].history(period="1y")
+                
+                if hist.empty:
+                    continue
+                
+                current_price = hist['Close'].iloc[-1]
+                
+                def get_pct_change(days_ago=None, months_ago=None, start_year=False):
+                    if start_year:
+                        start_date = datetime.date(today.year, 1, 1)
+                    elif months_ago:
+                        start_date = today - relativedelta(months=months_ago)
+                    else:
+                        return 0.0 # Should not happen
+                        
+                    # Find closest date in history (backwards)
+                    # Use tz-naive comparison if needed
+                    hist_dates = hist.index.date
+                    
+                    # Find finding the closest date <= start_date
+                    # This is a bit rough, but sufficient for dashboard
+                    
+                    # Filter history to only include dates <= start_date
+                    # But actually we want the price AT start_date. 
+                    # If start_date is today, change is 0.
+                    # If start_date was weekend, we want Friday before.
+                    
+                    # Simplification: Get row closest to start_date
+                    # We can search in the index
+                    
+                    # Convert index to dates
+                    # Index is usually datetime, let's treat as date
+                    
+                    target_idx = hist.index[hist.index.date <= start_date]
+                    if target_idx.empty:
+                        # If we don't have history going back that far (e.g. valid YTD but not 1Y)
+                        # Try to use the first available point? Or return None?
+                        # Let's return None to indicate no data for period
+                        if start_year: # YTD should usually exist if recent
+                             return (current_price - hist['Close'].iloc[0]) / hist['Close'].iloc[0]
+                        return None
+
+                    start_price = hist.loc[target_idx[-1]]['Close']
+                    return (current_price - start_price) / start_price
+
+                # Metrics
+                # YTD
+                ytd_start = datetime.date(today.year, 1, 1)
+                # If today is Jan 1st?
+                
+                perf = {}
+                
+                # YTD
+                # Use history(period="ytd") is easiest for YTD specifically but we already fetched 1y
+                # Let's just calculate manually to batch fewer calls
+                
+                idx_ytd = hist.index[hist.index.date < today] # All past settings
+                # Actually, YTD is from Dec 31 prev year or Jan 1 current year.
+                # Let's use get_pct_change with start_year=True
+                perf['YTD'] = get_pct_change(start_year=True)
+                perf['1Y'] = get_pct_change(months_ago=12) # Might fail if history < 1y
+                perf['6M'] = get_pct_change(months_ago=6)
+                perf['3M'] = get_pct_change(months_ago=3)
+                
+                results[ticker] = perf
+                
+            except Exception as e:
+                logger.warning(f"Failed to fetch performance for {ticker}: {e}")
+                
+        return results
+        
+    except Exception as e:
+        logger.error(f"Error fetching performance: {e}")
+        return {}
+
 @app.get("/index-exposure")
 async def get_index_exposure():
     try:

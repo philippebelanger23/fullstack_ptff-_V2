@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Globe, DollarSign, Map as MapIcon, Zap } from 'lucide-react';
-import { fetchIndexExposure } from '../services/api';
+import { fetchIndexExposure, fetchCurrencyPerformance } from '../services/api';
 import { CountryTreemap } from '../components/CountryTreemap';
 import { ClevelandDotPlot } from '../components/ClevelandDotPlot';
 
 export const IndexView: React.FC = () => {
     const [exposure, setExposure] = useState<{ sectors: any[], geography: any[], raw?: any }>({ sectors: [], geography: [] });
+    const [currencyPerf, setCurrencyPerf] = useState<Record<string, Record<string, number>>>({});
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -14,6 +15,11 @@ export const IndexView: React.FC = () => {
             setLoading(true);
             const res = await fetchIndexExposure();
             setExposure(res);
+
+            // Fetch currency performance
+            const perf = await fetchCurrencyPerformance(["USDCAD=X", "JPYCAD=X", "EURCAD=X"]);
+            setCurrencyPerf(perf);
+
             setLoading(false);
         };
         load();
@@ -130,7 +136,7 @@ export const IndexView: React.FC = () => {
                                 <thead className="bg-wallstreet-100 text-wallstreet-500 text-xs uppercase">
                                     <tr>
                                         <th className="p-2 text-left">Region</th>
-                                        <th className="p-2 text-right">Weight</th>
+                                        <th className="p-2 text-right">Exposure</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -158,33 +164,78 @@ export const IndexView: React.FC = () => {
                             <p className="text-xs text-wallstreet-500">Derived from geographic allocation.</p>
                         </div>
                         <div className="flex-1">
-                            <ul className="space-y-4 text-sm font-mono">
-                                {(() => {
-                                    // Ensure currency adds up to 100%
-                                    const totalCurrency = currencyExposure.reduce((sum, c) => sum + c.weight, 0);
-                                    let finalCurrency = [...currencyExposure];
+                            <table className="w-full text-sm font-mono table-fixed">
+                                <thead className="bg-wallstreet-100 text-wallstreet-500 text-xs uppercase">
+                                    <tr>
+                                        <th className="p-2 text-left w-[10%]">Currency</th>
+                                        <th className="p-2 text-center w-[25%]">Exposure</th>
+                                        <th className="p-2 text-center text-xs text-wallstreet-400 w-[15%]">YTD</th>
+                                        <th className="p-2 text-center text-xs text-wallstreet-400 w-[15%]">3M</th>
+                                        <th className="p-2 text-center text-xs text-wallstreet-400 w-[15%]">6M</th>
+                                        <th className="p-2 text-center text-xs text-wallstreet-400 w-[15%]">1Y</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {(() => {
+                                        // Ensure currency adds up to 100%
+                                        const totalCurrency = currencyExposure.reduce((sum, c) => sum + c.weight, 0);
+                                        let finalCurrency = [...currencyExposure];
 
-                                    if (totalCurrency < 99.9) {
-                                        const diff = 100 - totalCurrency;
-                                        // Check if 'Other' already exists
-                                        const otherIndex = finalCurrency.findIndex(c => c.code === 'Other');
-                                        if (otherIndex >= 0) {
-                                            finalCurrency[otherIndex].weight += diff;
-                                        } else {
-                                            finalCurrency.push({ code: 'Other', weight: diff });
+                                        if (totalCurrency < 99.9) {
+                                            const diff = 100 - totalCurrency;
+                                            // Check if 'Other' already exists
+                                            const otherIndex = finalCurrency.findIndex(c => c.code === 'Other');
+                                            if (otherIndex >= 0) {
+                                                finalCurrency[otherIndex].weight += diff;
+                                            } else {
+                                                finalCurrency.push({ code: 'Other', weight: diff });
+                                            }
                                         }
-                                    }
 
-                                    return finalCurrency.map((c) => (
-                                        <li key={c.code} className={`flex justify-between items-center border-b border-wallstreet-200 pb-3 last:border-0 ${c.code === 'Other' ? 'text-slate-400' : ''}`}>
-                                            <span className="font-medium">{c.code} Exposure</span>
-                                            <span className={`font-bold text-lg ${c.code === 'Other' ? 'text-slate-400 font-normal' : c.code === 'USD' ? 'text-blue-700' : c.code === 'CAD' ? 'text-red-700' : 'text-slate-700'}`}>
-                                                {c.weight.toFixed(1)}%
-                                            </span>
-                                        </li>
-                                    ));
-                                })()}
-                            </ul>
+                                        const getTicker = (code: string) => {
+                                            if (code === 'USD') return 'USDCAD=X';
+                                            if (code === 'JPY') return 'JPYCAD=X';
+                                            if (code === 'EUR') return 'EURCAD=X';
+                                            if (code === 'CAD') return 'CAD';
+                                            return '';
+                                        };
+
+                                        const formatPerf = (val: number | undefined) => {
+                                            if (val === undefined) return '-';
+                                            const color = val > 0 ? 'text-green-600' : val < 0 ? 'text-red-500' : 'text-slate-400';
+                                            return <span className={color}>{(val * 100).toFixed(1)}%</span>;
+                                        };
+
+                                        return finalCurrency.map((c) => {
+                                            const ticker = getTicker(c.code);
+                                            // Handle Base Currency (CAD)
+                                            let perf = currencyPerf[ticker] || {};
+                                            if (ticker === 'CAD') {
+                                                perf = { YTD: 0, '1Y': 0, '6M': 0, '3M': 0 };
+                                            }
+
+                                            return (
+                                                <tr key={c.code} className={`border-b border-wallstreet-100 hover:bg-wallstreet-50 ${c.code === 'Other' ? 'text-slate-400' : ''}`}>
+                                                    <td className="p-2 font-medium">{c.code}</td>
+                                                    <td className={`p-2 text-center ${c.code === 'Other' ? 'font-normal' : c.code === 'USD' ? 'text-blue-700' : c.code === 'CAD' ? 'text-red-700' : 'text-slate-700'}`}>
+                                                        {c.weight.toFixed(1)}%
+                                                    </td>
+                                                    {c.code !== 'Other' ? (
+                                                        <>
+                                                            <td className="p-2 text-center">{formatPerf(perf.YTD)}</td>
+                                                            <td className="p-2 text-center">{formatPerf(perf['3M'])}</td>
+                                                            <td className="p-2 text-center">{formatPerf(perf['6M'])}</td>
+                                                            <td className="p-2 text-center">{formatPerf(perf['1Y'])}</td>
+                                                        </>
+                                                    ) : (
+                                                        <td colSpan={4} className="p-2 text-center text-slate-300">-</td>
+                                                    )}
+                                                </tr>
+                                            )
+                                        });
+                                    })()}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>

@@ -111,7 +111,44 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data }) => {
       {/* KPI Section */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-in fade-in slide-in-from-bottom-2">
         <KPICard title="Total Exposure" value={`${totalWeight.toFixed(2)}%`} subtext="Gross Allocation" icon={Wallet} colorClass={totalWeight > 100 ? 'text-wallstreet-danger' : 'text-wallstreet-accent'} />
-        <KPICard title="Positions" value={currentHoldings.length} subtext="Active Holdings" icon={Layers} colorClass="text-wallstreet-text" />
+
+        {/* Calculated Currency Exposure KPI */}
+        {(() => {
+          let usWeight = 0;
+          let cadWeight = 0;
+          let intlWeight = 0;
+
+          // Helper logic duplicated from PortfolioTable (ideal to refactor later but inline for now)
+          currentHoldings.forEach(item => {
+            const t = item.ticker.toUpperCase();
+            let region = 'US';
+            if (t.includes('BIP791') || t.includes('DJT03868') || t.endsWith('.PA') || t.endsWith('.L') || t.endsWith('.DE') || t.endsWith('.HK')) {
+              region = 'INTL';
+            } else if (t.endsWith('.TO') || t.endsWith('.V') || t.startsWith('TDB') || t.startsWith('DYN')) {
+              region = 'CA';
+            }
+
+            if (region === 'US') usWeight += item.weight;
+            else if (region === 'CA') cadWeight += item.weight;
+            else intlWeight += item.weight;
+          });
+
+          return (
+            <KPICard
+              title="Currency Exposure"
+              value={
+                <div className="flex flex-col text-sm mt-1 space-y-1">
+                  <div className="flex justify-between w-full gap-4"><span>🇺🇸 USD</span> <span className="text-blue-600">{usWeight.toFixed(1)}%</span></div>
+                  <div className="flex justify-between w-full gap-4"><span>🇨🇦 CAD</span> <span className="text-red-600">{cadWeight.toFixed(1)}%</span></div>
+                </div> as any // Casting as any to bypass string/number type restriction for custom UI
+              }
+              subtext="FX Allocation"
+              icon={null}
+              colorClass="text-wallstreet-text"
+            />
+          );
+        })()}
+
         <KPICard title="Top 10 Weight" value={`${top10TotalWeight.toFixed(2)}%`} subtext="Concentration" icon={PieChartIcon} colorClass="text-wallstreet-accent" />
       </div>
 
