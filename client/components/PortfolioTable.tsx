@@ -12,6 +12,7 @@ export const PortfolioTable: React.FC<PortfolioTableProps> = ({ currentHoldings 
   // Helper to determine Region
   const getRegion = (ticker: string) => {
     const t = ticker.toUpperCase();
+    if (t === '$CASH$' || t.includes('CASH')) return '';
     if (t.includes('BIP791') || t.includes('DJT03868')) return 'INTL';
     if (t.endsWith('.TO') || t.endsWith('.V') || t.startsWith('TDB') || t.startsWith('DYN')) return 'CA';
     if (t.endsWith('.PA') || t.endsWith('.L') || t.endsWith('.DE') || t.endsWith('.HK')) return 'INTL';
@@ -87,9 +88,11 @@ export const PortfolioTable: React.FC<PortfolioTableProps> = ({ currentHoldings 
                     {item.weight.toFixed(2)}%
                   </td>
                   <td className="px-6 py-4 text-center">
-                    <span className={`px-2 py-1 rounded-md text-[10px] font-bold border ${getRegionColor(region)}`}>
-                      {region}
-                    </span>
+                    {region && (
+                      <span className={`px-2 py-1 rounded-md text-[10px] font-bold border ${getRegionColor(region)}`}>
+                        {region}
+                      </span>
+                    )}
                   </td>
                   <td className="px-6 py-4 text-center font-bold text-wallstreet-text">
                     {sector}

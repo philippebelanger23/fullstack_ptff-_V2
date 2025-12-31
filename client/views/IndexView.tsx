@@ -217,7 +217,7 @@ export const IndexView: React.FC = () => {
                                             return (
                                                 <tr key={c.code} className={`border-b border-wallstreet-100 hover:bg-wallstreet-50 ${c.code === 'Other' ? 'text-slate-400' : ''}`}>
                                                     <td className="p-2 font-medium">{c.code}</td>
-                                                    <td className={`p-2 text-center ${c.code === 'Other' ? 'font-normal' : c.code === 'USD' ? 'text-blue-700' : c.code === 'CAD' ? 'text-red-700' : 'text-slate-700'}`}>
+                                                    <td className={`p-2 text-center ${c.code === 'Other' ? 'font-normal' : `font-bold ${c.code === 'USD' ? 'text-blue-700' : c.code === 'CAD' ? 'text-red-700' : 'text-slate-700'}`}`}>
                                                         {c.weight.toFixed(1)}%
                                                     </td>
                                                     {c.code !== 'Other' ? (

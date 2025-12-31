@@ -4,7 +4,7 @@ import { PortfolioTable } from '../components/PortfolioTable';
 import { KPICard } from '../components/KPICard';
 import { ConcentrationPieChart } from '../components/ConcentrationPieChart';
 import { PortfolioEvolutionChart } from '../components/PortfolioEvolutionChart';
-import { Wallet, Layers, PieChart as PieChartIcon } from 'lucide-react';
+import { Wallet, Layers, PieChart as PieChartIcon, Wallet2Icon, WalletIcon } from 'lucide-react';
 
 interface DashboardViewProps {
   data: PortfolioItem[];
@@ -90,7 +90,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data }) => {
   const enrichedCurrentHoldings = useMemo(() => {
     return currentHoldings.map(item => {
       const cleanTicker = item.ticker.trim();
-      const sector = sectorMap[cleanTicker] || sectorMap[item.ticker] || item.sector;
+      let sector = sectorMap[cleanTicker] || sectorMap[item.ticker] || item.sector;
+
+      // Explicitly set sector for Cash
+      if (cleanTicker === '$CASH$') {
+        sector = 'CASH';
+      }
+
       return sector ? { ...item, sector } : item;
     });
   }, [currentHoldings, sectorMap]);
@@ -109,8 +115,55 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data }) => {
       </header>
 
       {/* KPI Section */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-in fade-in slide-in-from-bottom-2">
-        <KPICard title="Total Exposure" value={`${totalWeight.toFixed(2)}%`} subtext="Gross Allocation" icon={Wallet} colorClass={totalWeight > 100 ? 'text-wallstreet-danger' : 'text-wallstreet-accent'} />
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 animate-in fade-in slide-in-from-bottom-2">
+        {/* Calculated Capital Allocation KPI */}
+        {(() => {
+          // Calculate Cash based on the explicit 'CASH' sector we just assigned
+          const cashWeight = enrichedCurrentHoldings
+            .filter(h => h.sector === 'CASH')
+            .reduce((sum, h) => sum + h.weight, 0);
+
+          const investedWeight = totalWeight - cashWeight;
+
+          return (
+            <KPICard
+              title="Capital Allocated"
+              value={
+                <div className="flex w-full items-center mt-1">
+                  <div className="flex-1 flex flex-col items-center justify-center">
+                    <div className="flex items-center gap-1.5 mb-1"><span className="text-xs font-extrabold text-slate-600 uppercase tracking-wider">Invested</span></div>
+                    <span className="text-xl font-bold text-wallstreet-text font-mono">{investedWeight.toFixed(2)}%</span>
+                  </div>
+                  <div className="w-px h-8 bg-wallstreet-100"></div>
+                  <div className="flex-1 flex flex-col items-center justify-center">
+                    <div className="flex items-center gap-1.5 mb-1"><span className="text-xs font-extrabold text-slate-600 uppercase tracking-wider">Cash or Equivalents</span></div>
+                    <span className="text-xl font-bold text-wallstreet-text font-mono">{cashWeight.toFixed(2)}%</span>
+                  </div>
+                </div> as any
+              }
+              colorClass="text-wallstreet-text"
+            />
+          );
+        })()}
+
+        <KPICard
+          title="Concentration"
+          value={
+            <div className="flex w-full items-center mt-1">
+              <div className="flex-1 flex flex-col items-center justify-center">
+                <div className="flex items-center gap-1.5 mb-1"><span className="text-xs font-extrabold text-slate-600 uppercase tracking-wider">Positions</span></div>
+                <span className="text-xl font-bold text-wallstreet-text font-mono">{currentHoldings.filter(h => h.weight > 0.01).length}</span>
+              </div>
+              <div className="w-px h-8 bg-wallstreet-100"></div>
+              <div className="flex-1 flex flex-col items-center justify-center">
+                <div className="flex items-center gap-1.5 mb-1"><span className="text-xs font-extrabold text-slate-600 uppercase tracking-wider">Top 10</span></div>
+                <span className="text-xl font-bold text-wallstreet-text font-mono">{top10TotalWeight.toFixed(0)}%</span>
+              </div>
+            </div> as any
+          }
+          icon={null}
+          colorClass="text-wallstreet-text"
+        />
 
         {/* Calculated Currency Exposure KPI */}
         {(() => {
@@ -137,19 +190,47 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data }) => {
             <KPICard
               title="Currency Exposure"
               value={
-                <div className="flex flex-col text-sm mt-1 space-y-1">
-                  <div className="flex justify-between w-full gap-4"><span>🇺🇸 USD</span> <span className="text-blue-600">{usWeight.toFixed(1)}%</span></div>
-                  <div className="flex justify-between w-full gap-4"><span>🇨🇦 CAD</span> <span className="text-red-600">{cadWeight.toFixed(1)}%</span></div>
-                </div> as any // Casting as any to bypass string/number type restriction for custom UI
+                <div className="flex w-full items-center mt-1">
+                  <div className="flex-1 flex flex-col items-center justify-center">
+                    <div className="flex items-center gap-1.5 mb-1"><span className="text-xs font-extrabold text-slate-600 uppercase tracking-wider">USD</span></div>
+                    <span className="text-xl font-bold text-blue-600 font-mono">{usWeight.toFixed(1)}%</span>
+                  </div>
+                  <div className="w-px h-8 bg-wallstreet-100"></div>
+                  <div className="flex-1 flex flex-col items-center justify-center">
+                    <div className="flex items-center gap-1.5 mb-1"><span className="text-xs font-extrabold text-slate-600 uppercase tracking-wider">CAD</span></div>
+                    <span className="text-xl font-bold text-red-600 font-mono">{cadWeight.toFixed(1)}%</span>
+                  </div>
+                  <div className="w-px h-8 bg-wallstreet-100"></div>
+                  <div className="flex-1 flex flex-col items-center justify-center">
+                    <div className="flex items-center gap-1.5 mb-1"><span className="text-xs font-extrabold text-slate-600 uppercase tracking-wider">INTL</span></div>
+                    <span className="text-xl font-bold text-slate-600 font-mono">{intlWeight.toFixed(1)}%</span>
+                  </div>
+                </div> as any
               }
-              subtext="FX Allocation"
               icon={null}
-              colorClass="text-wallstreet-text"
+              colorClass="text-wallstreet-text w-full"
             />
           );
         })()}
 
-        <KPICard title="Top 10 Weight" value={`${top10TotalWeight.toFixed(2)}%`} subtext="Concentration" icon={PieChartIcon} colorClass="text-wallstreet-accent" />
+        <KPICard
+          title="Risk Metrics"
+          value={
+            <div className="flex w-full items-center mt-1">
+              <div className="flex-1 flex flex-col items-center justify-center">
+                <div className="flex items-center gap-1.5 mb-1"><span className="text-xs font-extrabold text-slate-600 uppercase tracking-wider">Beta</span></div>
+                <span className="text-xl font-bold text-wallstreet-text font-mono">1.12</span>
+              </div>
+              <div className="w-px h-8 bg-wallstreet-100"></div>
+              <div className="flex-1 flex flex-col items-center justify-center">
+                <div className="flex items-center gap-1.5 mb-1"><span className="text-xs font-extrabold text-slate-600 uppercase tracking-wider">Sharpe</span></div>
+                <span className="text-xl font-bold text-wallstreet-text font-mono">1.84</span>
+              </div>
+            </div> as any
+          }
+          icon={null}
+          colorClass="text-wallstreet-text"
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-auto lg:h-[450px]">
