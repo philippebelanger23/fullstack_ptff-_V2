@@ -395,7 +395,7 @@ export const UploadView: React.FC<UploadViewProps> = ({ onDataLoaded, onProceed,
               onClick={handlePythonAnalysis}
               disabled={!weightsFile || isAnalyzing}
               className={`w-full py-3 rounded-lg font-bold flex items-center justify-center gap-2 mt-4 transition-all
-                            ${!weightsFile || isAnalyzing ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-wallstreet-900 text-wallstreet-accent hover:bg-[#2d49ea] hover:text-white'}
+                            ${!weightsFile || isAnalyzing ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-wallstreet-900 text-wallstreet-accent hover:bg-[#0a2351] hover:text-white'}
                         `}
             >
               {isAnalyzing ? (

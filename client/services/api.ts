@@ -30,7 +30,17 @@ export const analyzePortfolio = async (weightsFile: File, navFile?: File): Promi
 };
 
 // Cache storage
+// Cache storage - Initialize from localStorage if available
 let sectorCache: Record<string, string> = {};
+try {
+    const cached = localStorage.getItem('sectorCache');
+    if (cached) {
+        sectorCache = JSON.parse(cached);
+    }
+} catch (e) {
+    console.warn("Failed to load sector cache from localStorage", e);
+}
+
 let indexExposureCache: { sectors: any[], geography: any[] } | null = null;
 
 export const fetchSectors = async (tickers: string[]): Promise<Record<string, string>> => {
@@ -52,6 +62,12 @@ export const fetchSectors = async (tickers: string[]): Promise<Record<string, st
                 const newSectors = await response.json();
                 // 3. Update cache
                 sectorCache = { ...sectorCache, ...newSectors };
+                // Persist to localStorage
+                try {
+                    localStorage.setItem('sectorCache', JSON.stringify(sectorCache));
+                } catch (e) {
+                    console.warn("Failed to save sector cache to localStorage", e);
+                }
             } else {
                 console.error('Failed to fetch sectors');
             }

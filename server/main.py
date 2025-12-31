@@ -10,7 +10,7 @@ import logging
 
 # Import existing logic
 from data_loader import load_weights_file, load_nav_file
-from market_data import calculate_returns, calculate_benchmark_returns, build_results_dataframe
+from market_data import calculate_returns, calculate_benchmark_returns, build_results_dataframe, get_ticker_performance
 from cache_manager import load_cache, save_cache
 from constants import CASH_TICKER, FX_TICKER
 
@@ -156,43 +156,70 @@ async def fetch_sectors(request: dict):
         return {}
     
     import yfinance as yf
+    import json
     
     unique_tickers = list(set([t.strip() for t in tickers if t and isinstance(t, str)]))
-    try:
-        # yf.Tickers allows batch processing but getting info is sometimes better individually for reliability
-        # or we use the Tickers object.
-        # Let's try batch fetching info if possible, but yfinance is tricky with batch info.
-        # Actually, iterating is safer for 'info' attribute reliability.
-        
-        sector_map = {}
-        # Optimization: Filter out known non-equity patterns first to save API calls
-        # (Though yfinance handles them, it's faster to skip)
-        
-        # We can use Tickers object for multi-threading
-        tickers_obj = yf.Tickers(" ".join(unique_tickers))
-        
-        for ticker in unique_tickers:
+    
+    # --- Server-Side Persistence ---
+    cache_file = Path("data/sectors_cache.json")
+    server_cache = {}
+    
+    # Load existing cache
+    if cache_file.exists():
+        try:
+            with open(cache_file, "r") as f:
+                server_cache = json.load(f)
+        except Exception as e:
+            logger.warning(f"Failed to load sector cache file: {e}")
+
+    # Determine what creates a "miss" (not in server cache)
+    missing_on_server = [t for t in unique_tickers if t not in server_cache]
+    
+    if missing_on_server:
+        try:
+            # yf.Tickers allows batch processing but getting info is sometimes better individually for reliability
+            # or we use the Tickers object.
+            # Let's try batch fetching info if possible, but yfinance is tricky with batch info.
+            # Actually, iterating is safer for 'info' attribute reliability.
+            
+            # Optimization: Filter out known non-equity patterns first to save API calls
+            # (Though yfinance handles them, it's faster to skip)
+            
+            # We can use Tickers object for multi-threading
+            tickers_obj = yf.Tickers(" ".join(missing_on_server))
+            
+            for ticker in missing_on_server:
+                try:
+                    # Accessing info triggers the download
+                    info = tickers_obj.tickers[ticker].info
+                    sector = info.get('sector')
+                    
+                    # Check for ETF/Fund indicators if sector is missing
+                    if not sector:
+                        quote_type = info.get('quoteType', '').upper()
+                        if quote_type in ['ETF', 'MUTUALFUND']:
+                            sector = 'Mixed'
+                    
+                    if sector:
+                        server_cache[ticker] = sector
+                except Exception as e:
+                    logger.warning(f"Failed to fetch info for {ticker}: {e}")
+            
+            # Save updated cache
             try:
-                # Accessing info triggers the download
-                info = tickers_obj.tickers[ticker].info
-                sector = info.get('sector')
-                
-                # Check for ETF/Fund indicators if sector is missing
-                if not sector:
-                    quote_type = info.get('quoteType', '').upper()
-                    if quote_type in ['ETF', 'MUTUALFUND']:
-                        sector = 'Mixed'
-                
-                if sector:
-                    sector_map[ticker] = sector
+                # Ensure directory exists
+                cache_file.parent.mkdir(parents=True, exist_ok=True)
+                with open(cache_file, "w") as f:
+                    json.dump(server_cache, f)
             except Exception as e:
-                logger.warning(f"Failed to fetch info for {ticker}: {e}")
+                logger.error(f"Failed to save sector cache: {e}")
                 
-        return sector_map
-        
-    except Exception as e:
-        logger.error(f"Error fetching sectors: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        except Exception as e:
+            logger.error(f"Error fetching sectors: {e}")
+            # Continue to return what we have
+    
+    # Return requested sectors from the (now updated) server cache
+    return {k: server_cache[k] for k in unique_tickers if k in server_cache}
 
 @app.get("/index-exposure")
 async def get_index_exposure():
@@ -258,6 +285,24 @@ async def get_index_exposure():
     except Exception as e:
         logger.error(f"Error in index-exposure: {e}")
         return {"sectors": [], "geography": []}
+
+@app.post("/currency-performance")
+async def currency_performance(request: dict):
+    from cache_manager import load_cache, save_cache
+    
+    tickers = request.get("tickers", [])
+    if not tickers:
+        return {}
+        
+    try:
+        cache = load_cache()
+        performance = get_ticker_performance(tickers, cache)
+        save_cache(cache)
+        return performance
+    except Exception as e:
+        logger.error(f"Error in currency-performance: {e}")
+        return {}
+
 
 if __name__ == "__main__":
     import uvicorn

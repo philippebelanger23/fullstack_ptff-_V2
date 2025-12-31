@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Globe, DollarSign, Map as MapIcon, Zap } from 'lucide-react';
 import { fetchIndexExposure } from '../services/api';
-import { SunburstChart } from '../components/SunburstChart';
+import { CountryTreemap } from '../components/CountryTreemap';
 import { ClevelandDotPlot } from '../components/ClevelandDotPlot';
 
 export const IndexView: React.FC = () => {
@@ -19,60 +19,7 @@ export const IndexView: React.FC = () => {
         load();
     }, []);
 
-    const compositionData = [
-        { name: 'ACWI', value: 75, color: '#4472C4' }, // Excel Blue inner
-        { name: 'TSX', value: 25, color: '#ED7D31' }, // Excel Orange inner
-    ];
 
-    // Prepare sunburst data (Nested Pie) - GEOGRAPHY based
-    const sunburstData = React.useMemo(() => {
-        // @ts-ignore
-        if (!exposure.raw || !exposure.raw.ACWI) return { inner: [], outer: [] };
-
-        // Colors from Excel Screenshot
-        const colorACWI = '#4472C4'; // Blue
-        const colorTSX = '#ED7D31';  // Orange
-
-        const inner = [
-            { name: 'ACWI', value: 75, color: colorACWI },
-            { name: 'TSX', value: 25, color: colorTSX },
-        ];
-
-        // Helper to convert dictionary to sorted array
-        // @ts-ignore
-        const getSortedRegions = (geoDict) => {
-            return Object.entries(geoDict)
-                // @ts-ignore
-                .map(([region, weight]) => ({ name: region, value: weight }))
-                // @ts-ignore
-                .sort((a, b) => b.value - a.value);
-        };
-
-        // @ts-ignore
-        const acwiRegions = getSortedRegions(exposure.raw.ACWI.Geography).map((r, i) => {
-            // ACWI Children (Blue family)
-            // We keep them all the same "Blue" but maybe slightly different shade if desired, 
-            // OR strictly identical to create that "solid block with white lines" look from the screenshot.
-            // visual inspection of screenshot suggests they are ALL the same blue, just separated by white lines.
-            return {
-                name: r.name,
-                value: r.value * 0.75, // Scale by index weight
-                color: '#5B9BD5', // Slightly lighter Excel blue for outer ring
-            };
-        });
-
-        // @ts-ignore
-        const tsxRegions = getSortedRegions(exposure.raw.TSX.Geography).map((r, i) => ({
-            name: r.name,
-            value: r.value * 0.25,
-            color: '#F4B183', // Slightly lighter Excel orange for outer ring
-        }));
-
-        return {
-            inner,
-            outer: [...acwiRegions, ...tsxRegions]
-        };
-    }, [exposure]);
 
     // Calculate currency exposure from geography data
     const currencyExposure = React.useMemo(() => {
@@ -141,11 +88,11 @@ export const IndexView: React.FC = () => {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 bg-white p-6 rounded-xl border border-wallstreet-700 shadow-sm flex flex-col h-[500px]">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="bg-white p-6 rounded-xl border border-wallstreet-700 shadow-sm flex flex-col h-[500px]">
                     <div className="flex justify-between items-center mb-6">
                         <div>
-                            <h3 className="text-lg font-bold font-mono text-wallstreet-text">Sector & Factor Exposure</h3>
+                            <h3 className="text-lg font-bold font-mono text-wallstreet-text">Sector Exposure</h3>
                             <p className="text-xs text-wallstreet-500">Real allocation data scraped from iShares/BlackRock (as of Dec 30, 2025).</p>
                         </div>
                     </div>
@@ -157,12 +104,14 @@ export const IndexView: React.FC = () => {
                 <div className="bg-white p-6 rounded-xl border border-wallstreet-700 shadow-sm flex flex-col h-[500px]">
                     <h3 className="text-lg font-bold font-mono text-wallstreet-text mb-2">Geographic Breakdown</h3>
                     <div className="flex-1 w-full relative min-h-0">
-                        <SunburstChart data={sunburstData} />
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none pb-12">
-                            <div className="text-center">
-                                {/* Center content now handled by inner labels */}
-                            </div>
-                        </div>
+                        <CountryTreemap data={(() => {
+                            const data = exposure.geography.map(g => ({ name: g.region, value: g.weight }));
+                            const total = data.reduce((sum, item) => sum + item.value, 0);
+                            if (total < 99.9) {
+                                data.push({ name: 'Others', value: 100 - total });
+                            }
+                            return data;
+                        })()} />
                     </div>
                 </div>
             </div>
@@ -185,12 +134,19 @@ export const IndexView: React.FC = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {exposure.geography.map((g, i) => (
-                                        <tr key={i} className="border-b border-wallstreet-100 hover:bg-wallstreet-50">
-                                            <td className="p-2 font-medium">{g.region}</td>
-                                            <td className="p-2 text-right font-bold">{g.weight}%</td>
-                                        </tr>
-                                    ))}
+                                    {(() => {
+                                        const geoData = [...exposure.geography];
+                                        const total = geoData.reduce((sum, item) => sum + item.weight, 0);
+                                        if (total < 99.9) {
+                                            geoData.push({ region: 'Others', weight: 100 - total });
+                                        }
+                                        return geoData.map((g, i) => (
+                                            <tr key={i} className={`border-b border-wallstreet-100 hover:bg-wallstreet-50 ${g.region === 'Others' ? 'text-slate-400' : ''}`}>
+                                                <td className="p-2 font-medium">{g.region}</td>
+                                                <td className={`p-2 text-right ${g.region === 'Others' ? 'font-normal' : 'font-bold'}`}>{g.weight.toFixed(1)}%</td>
+                                            </tr>
+                                        ));
+                                    })()}
                                 </tbody>
                             </table>
                         </div>
@@ -203,18 +159,32 @@ export const IndexView: React.FC = () => {
                         </div>
                         <div className="flex-1">
                             <ul className="space-y-4 text-sm font-mono">
-                                {currencyExposure.map((c) => (
-                                    <li key={c.code} className="flex justify-between items-center border-b border-wallstreet-200 pb-3 last:border-0">
-                                        <span className="font-medium">{c.code} Exposure</span>
-                                        <span className={`font-bold text-lg ${c.code === 'USD' ? 'text-blue-700' : c.code === 'CAD' ? 'text-red-700' : 'text-slate-700'}`}>
-                                            {c.weight.toFixed(2)}%
-                                        </span>
-                                    </li>
-                                ))}
+                                {(() => {
+                                    // Ensure currency adds up to 100%
+                                    const totalCurrency = currencyExposure.reduce((sum, c) => sum + c.weight, 0);
+                                    let finalCurrency = [...currencyExposure];
+
+                                    if (totalCurrency < 99.9) {
+                                        const diff = 100 - totalCurrency;
+                                        // Check if 'Other' already exists
+                                        const otherIndex = finalCurrency.findIndex(c => c.code === 'Other');
+                                        if (otherIndex >= 0) {
+                                            finalCurrency[otherIndex].weight += diff;
+                                        } else {
+                                            finalCurrency.push({ code: 'Other', weight: diff });
+                                        }
+                                    }
+
+                                    return finalCurrency.map((c) => (
+                                        <li key={c.code} className={`flex justify-between items-center border-b border-wallstreet-200 pb-3 last:border-0 ${c.code === 'Other' ? 'text-slate-400' : ''}`}>
+                                            <span className="font-medium">{c.code} Exposure</span>
+                                            <span className={`font-bold text-lg ${c.code === 'Other' ? 'text-slate-400 font-normal' : c.code === 'USD' ? 'text-blue-700' : c.code === 'CAD' ? 'text-red-700' : 'text-slate-700'}`}>
+                                                {c.weight.toFixed(1)}%
+                                            </span>
+                                        </li>
+                                    ));
+                                })()}
                             </ul>
-                            <div className="mt-6 p-3 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800 leading-relaxed">
-                                <strong>Note:</strong> Currency exposure is derived from the geographic allocation. ACWI's ~64% US allocation combined with 75% ACWI weight means approximately {(0.75 * 64.06).toFixed(1)}% of the index is USD-denominated.
-                            </div>
                         </div>
                     </div>
                 </div>

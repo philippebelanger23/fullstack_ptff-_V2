@@ -177,3 +177,64 @@ def build_results_dataframe(weights_dict, returns, prices, dates, cache):
     
     return df, periods
 
+
+def get_ticker_performance(tickers, cache):
+    """
+    Get performance for a list of tickers for YTD, 3M, 6M, 1Y.
+    Returns a dictionary keyed by ticker.
+    """
+    import datetime
+    
+    today = datetime.datetime.now()
+    # Ensure time is zeroed out for consistency
+    today = pd.to_datetime(today.date())
+    
+    # Define start dates
+    dates = {
+        "1Y": today - pd.DateOffset(years=1),
+        "6M": today - pd.DateOffset(months=6),
+        "3M": today - pd.DateOffset(months=3),
+        "YTD": pd.to_datetime(datetime.date(today.year, 1, 1))
+    }
+    
+    results = {}
+    
+    for ticker in tickers:
+        if ticker == "CADCAD=X":
+            results[ticker] = {
+                "YTD": 0.0,
+                "3M": 0.0,
+                "6M": 0.0,
+                "1Y": 0.0
+            }
+            continue
+            
+        ticker_results = {}
+        
+        # Get current price
+        try:
+            current_price = get_price_on_date(ticker, today, cache)
+        except Exception as e:
+            # Fallback if today's price is not available (e.g. weekend), try yesterday
+            try:
+                current_price = get_price_on_date(ticker, today - pd.Timedelta(days=1), cache)
+            except:
+                 # If totally failed, skip
+                results[ticker] = {k: 0.0 for k in dates}
+                continue
+
+        for period_name, start_date in dates.items():
+            try:
+                start_price = get_price_on_date(ticker, start_date, cache)
+                if start_price and start_price != 0:
+                    ret = (current_price / start_price) - 1
+                    ticker_results[period_name] = ret
+                else:
+                    ticker_results[period_name] = 0.0
+            except Exception:
+                ticker_results[period_name] = 0.0
+                
+        results[ticker] = ticker_results
+        
+    return results
+
