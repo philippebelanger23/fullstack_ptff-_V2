@@ -7,6 +7,18 @@ interface CountryTreemapProps {
     height?: number | string;
 }
 
+const developedMarkets = [
+    'United Kingdom', 'Japan', 'France', 'Switzerland', 'Germany', 'Australia', 'Netherlands',
+    'Sweden', 'Denmark', 'Italy', 'Spain', 'Hong Kong', 'Singapore', 'Finland', 'Belgium',
+    'Norway', 'Ireland', 'Israel', 'New Zealand', 'Austria', 'Portugal'
+];
+
+const emergingMarkets = [
+    'China', 'Taiwan', 'India', 'Korea (South)', 'South Korea', 'Brazil', 'Saudi Arabia',
+    'South Africa', 'Mexico', 'Thailand', 'Indonesia', 'Malaysia', 'Turkey', 'Philippines',
+    'Poland', 'Chile', 'Greece', 'Peru', 'Hungary', 'Czech Republic', 'Egypt', 'Colombia'
+];
+
 const CustomizedContent = (props: any) => {
     const { x, y, width, height, index, name, value, depth } = props;
 
@@ -19,11 +31,16 @@ const CustomizedContent = (props: any) => {
     }
 
     // Color Logic
-    let fill = '#707882ff'; // Default: Slate 600 (Darker for better contrast)
+    let fill = '#94a3b8'; // Default: Slate 400 (Neutral Grey for others)
+
     if (name === 'United States') {
-        fill = '#457affff'; // Blue 600
+        fill = '#2563eb'; // Blue 600
     } else if (name === 'Canada') {
-        fill = '#da3939ff'; // Red 600
+        fill = '#dc2626'; // Red 600
+    } else if (emergingMarkets.includes(name)) {
+        fill = '#d97706'; // Amber 600 (Distinct Warm Color for EM)
+    } else if (developedMarkets.includes(name)) {
+        fill = '#475569'; // Slate 600 (Darker Grey for DM)
     }
 
     // Gap and Radius logic
@@ -152,7 +169,11 @@ const CustomTooltip = ({ active, payload }: any) => {
                 <p className="text-slate-800 font-bold text-sm mb-1">{data.name}</p>
                 <div className="flex items-center justify-between gap-4">
                     <span className="text-slate-500 text-xs text-nowrap">Weight</span>
-                    <span className={`font-mono font-bold text-sm ${data.name === 'United States' ? 'text-blue-600' : data.name === 'Canada' ? 'text-red-600' : 'text-slate-600'}`}>
+                    <span className={`font-mono font-bold text-sm ${data.name === 'United States' ? 'text-blue-600' :
+                            data.name === 'Canada' ? 'text-red-600' :
+                                emergingMarkets.includes(data.name) ? 'text-amber-600' :
+                                    'text-slate-600'
+                        }`}>
                         {data.value.toFixed(2)}%
                     </span>
                 </div>

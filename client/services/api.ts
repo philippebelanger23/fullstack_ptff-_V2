@@ -127,3 +127,25 @@ export const fetchCurrencyPerformance = async (tickers: string[]): Promise<Recor
         return {};
     }
 };
+
+export const fetchBetas = async (tickers: string[]): Promise<Record<string, number>> => {
+    try {
+        const response = await fetch(`${API_Base_URL}/fetch-betas`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ tickers }),
+        });
+
+        if (response.ok) {
+            return await response.json();
+        } else {
+            console.error('Failed to fetch betas');
+            return {};
+        }
+    } catch (error) {
+        console.error("Error fetching betas:", error);
+        return {};
+    }
+};

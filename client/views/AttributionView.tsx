@@ -73,51 +73,112 @@ const AttributionTable = ({ title, items }: { title: string, items: TableItem[] 
     const topTickerSet = new Set([...topContributors, ...topDisruptors].map(i => i.ticker));
     const others = items.filter(i => !topTickerSet.has(i.ticker));
     const othersSum = others.reduce((acc, i) => ({ weight: acc.weight + i.weight, contribution: acc.contribution + i.contribution }), { weight: 0, contribution: 0 });
-    const othersReturn = othersSum.weight > 0 ? (othersSum.contribution / othersSum.weight) * 100 : 0;
+
+    // User Request: Force Other Holdings Weight to be the residual so Total is always 100%
+    // Weight = 100% - Sum(TopContributors) - Sum(TopDisruptors)
+    const residualOtherWeight = 100 - topContribSum.weight - topDisruptSum.weight;
+
+    // Recalculate Performance based on the Fixed Weight
+    // Formula: Return = (Contribution * 100) / Weight  (derived from Contrib = Weight/100 * Return)
+    const othersReturn = residualOtherWeight > 0.001 ? (othersSum.contribution * 100) / residualOtherWeight : 0;
+
     const totalSum = items.reduce((acc, i) => ({ weight: acc.weight + i.weight, contribution: acc.contribution + i.contribution }), { weight: 0, contribution: 0 });
 
     const RenderRow = ({ item, isBold = false, isSum = false }: { item: TableItem | any, isBold?: boolean, isSum?: boolean }) => (
-        <tr className={`border-b border-wallstreet-100 ${isSum ? 'bg-gray-50/50' : ''}`}>
-            <td className={`p-1.5 pl-3 text-left font-mono ${isBold || isSum ? 'font-bold text-wallstreet-text' : 'font-medium text-wallstreet-500'}`}>{isSum ? 'Σ' : item.ticker}</td>
-            <td className={`p-1.5 text-right font-mono ${isBold || isSum ? 'font-bold text-wallstreet-text' : 'text-wallstreet-500'}`}>{item.weight.toFixed(2)}%</td>
-            <td className={`p-1.5 text-right font-mono ${isBold || isSum ? 'font-bold' : ''} ${item.returnPct !== undefined ? (item.returnPct >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400'}`}>{item.returnPct !== undefined ? formatPct(item.returnPct) : '-'}</td>
-            <td className={`p-1.5 pr-3 text-right font-mono font-bold ${item.contribution >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatBps(item.contribution)}</td>
+        <tr className={`${isSum ? 'border-t-2 border-gray-300 bg-white' : 'border-b border-wallstreet-100 last:border-0'}`}>
+            <td className={`p-1 px-3 text-left ${isBold || isSum ? 'font-bold' : 'font-medium'} text-black truncate`}>{isSum ? 'Σ' : item.ticker}</td>
+            <td className={`p-1 px-2 text-center ${isBold || isSum ? 'font-bold' : ''} text-black`}>{item.weight.toFixed(2)}%</td>
+            <td className={`p-1 px-2 text-center ${isBold || isSum ? 'font-bold' : ''} ${item.returnPct !== undefined ? (item.returnPct >= 0 ? 'text-green-700' : 'text-red-700') : 'text-gray-400'}`}>
+                {item.returnPct !== undefined ? (item.returnPct < 0 ? `(${Math.abs(item.returnPct).toFixed(2)}%)` : `${item.returnPct.toFixed(2)}%`) : ''}
+            </td>
+            <td className={`p-1 px-2 text-right font-bold pr-4 ${item.contribution >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                {formatBps(item.contribution)}
+            </td>
         </tr>
     );
 
     return (
-        <div className="bg-white border border-wallstreet-700 rounded-lg shadow-sm overflow-hidden flex flex-col h-full">
-            <div className="bg-black text-white p-2 text-center font-mono font-bold uppercase tracking-widest text-sm">{title}</div>
-            <div className="overflow-x-auto flex-1">
-                <table className="w-full text-xs font-mono">
-                    <thead className="bg-wallstreet-900 border-b border-wallstreet-700 text-wallstreet-500">
-                        <tr>
-                            <th className="p-2 text-left w-1/4">Ticker</th>
-                            <th className="p-2 text-right w-1/4">Weight</th>
-                            <th className="p-2 text-right w-1/4">Performance</th>
-                            <th className="p-2 text-right w-1/4">Contrib. (bps)</th>
+        <div className="bg-white border border-wallstreet-700 rounded-xl shadow-sm flex flex-col h-full font-mono text-xs overflow-hidden">
+            {/* Title Row */}
+            <div className="bg-black text-white py-4 text-center font-bold uppercase tracking-wider text-sm">
+                {title}
+            </div>
+
+            <div className="flex-1 overflow-x-auto">
+                <table className="w-full">
+                    {/* Top Contributors Section */}
+                    <thead>
+                        {/* Spacer Row */}
+                        <tr className="h-4 bg-white"><td colSpan={4}></td></tr>
+
+                        {/* Section Title - Light Grey Background for seamless look */}
+                        <tr className="bg-white">
+                            <td colSpan={4} className="text-center font-bold text-black py-1.5 uppercase tracking-wide text-xs">Top Contributors</td>
+                        </tr>
+
+                        {/* Column Headers */}
+                        <tr className="bg-black text-white text-[10px] uppercase">
+                            <th className="p-1.5 px-2 text-center font-bold w-1/4">Ticker</th>
+                            <th className="p-1.5 px-2 text-center font-bold w-1/4">Weight</th>
+                            <th className="p-1.5 px-2 text-center font-bold w-1/4">Performance</th>
+                            <th className="p-1.5 px-2 text-center font-bold w-1/4">Contrib. (bps)</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <tr className="bg-gray-50"><td colSpan={4} className="p-1.5 text-center font-bold text-wallstreet-500 uppercase text-[10px] tracking-wider border-b border-wallstreet-100">Top Contributors</td></tr>
                         {topContributors.map((item, idx) => <RenderRow key={idx} item={item} />)}
                         <RenderRow item={{ ticker: '', weight: topContribSum.weight, returnPct: undefined, contribution: topContribSum.contribution }} isSum={true} />
-                        <tr className="bg-gray-50"><td colSpan={4} className="p-1.5 text-center font-bold text-wallstreet-500 uppercase text-[10px] tracking-wider border-b border-wallstreet-100 border-t border-wallstreet-200">Top Disruptors</td></tr>
+                    </tbody>
+
+                    {/* Top Disruptors Section */}
+                    <thead>
+                        {/* Spacer Row */}
+                        <tr className="h-4 bg-white"><td colSpan={4}></td></tr>
+
+                        {/* Section Title */}
+                        <tr className="bg-white ">
+                            <td colSpan={4} className="text-center font-bold text-black py-1.5 uppercase tracking-wide text-xs">Top Disruptors</td>
+                        </tr>
+
+                        {/* Column Headers */}
+                        <tr className="bg-black text-white text-[10px] uppercase">
+                            <th className="p-1.5 px-2 text-center font-bold w-1/4">Ticker</th>
+                            <th className="p-1.5 px-2 text-center font-bold w-1/4">Weight</th>
+                            <th className="p-1.5 px-2 text-center font-bold w-1/4">Performance</th>
+                            <th className="p-1.5 px-2 text-center font-bold w-1/4">Contrib. (bps)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
                         {topDisruptors.map((item, idx) => <RenderRow key={idx} item={item} />)}
                         <RenderRow item={{ ticker: '', weight: topDisruptSum.weight, returnPct: undefined, contribution: topDisruptSum.contribution }} isSum={true} />
                     </tbody>
-                    <tfoot className="bg-wallstreet-100 border-t-2 border-wallstreet-700">
-                        <tr className="border-b border-wallstreet-200">
-                            <td className="p-2 pl-3 text-left font-mono font-bold text-wallstreet-500 text-[10px] uppercase">Other Holdings</td>
-                            <td className="p-2 text-right font-mono font-medium">{othersSum.weight.toFixed(2)}%</td>
-                            <td className={`p-2 text-right font-mono font-medium ${othersReturn >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatPct(othersReturn)}</td>
-                            <td className={`p-2 pr-3 text-right font-mono font-bold ${othersSum.contribution >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatBps(othersSum.contribution)}</td>
+
+                    {/* Footer Section */}
+                    <tfoot>
+                        {/* Spacer Row equivalent to Top Disruptors gap */}
+                        <tr className="h-4 bg-white"><td colSpan={4}></td></tr>
+
+                        <tr className="">
+                            <td className="p-1 px-3 text-left font-bold text-black">Other Holdings</td>
+                            <td className="p-1 px-2 text-center font-medium">{residualOtherWeight.toFixed(2)}%</td>
+                            <td className={`p-1 px-2 text-center font-medium ${othersReturn < 0 ? 'text-red-700' : 'text-green-700'}`}>
+                                {othersReturn < 0 ? `(${Math.abs(othersReturn).toFixed(2)}%)` : `${othersReturn.toFixed(2)}%`}
+                            </td>
+                            <td className={`p-1 px-2 text-right font-bold pr-4 ${othersSum.contribution < 0 ? 'text-red-700' : 'text-green-700'}`}>
+                                {formatBps(othersSum.contribution)}
+                            </td>
                         </tr>
-                        <tr className="bg-wallstreet-200/50">
-                            <td className="p-2 pl-3 text-left font-mono font-extrabold text-wallstreet-text text-[10px] uppercase">Total Portfolio</td>
-                            <td className="p-2 text-right font-mono font-bold text-wallstreet-text">{totalSum.weight.toFixed(2)}%</td>
-                            <td className="p-2 text-right font-mono font-bold text-gray-400">-</td>
-                            <td className={`p-2 pr-3 text-right font-mono font-extrabold ${totalSum.contribution >= 0 ? 'text-green-700' : 'text-red-700'}`}>{formatBps(totalSum.contribution)}</td>
+
+                        {/* Gap between Other Holdings and Total Portfolio */}
+                        <tr className="h-4 bg-white"><td colSpan={4}></td></tr>
+
+                        {/* Total Portfolio - Grey Background */}
+                        <tr className="bg-[#d1d5db]">
+                            <td className="p-1.5 px-3 text-left font-extrabold text-black">Total Portfolio</td>
+                            <td className="p-1.5 px-2 text-center font-bold text-black">100.00%</td>
+                            <td className="p-1.5 px-2 text-center font-bold text-gray-500"></td>
+                            <td className={`p-1.5 px-2 text-right font-extrabold pr-4 ${totalSum.contribution < 0 ? 'text-red-700' : 'text-green-700'}`}>
+                                {formatBps(totalSum.contribution)}
+                            </td>
                         </tr>
                     </tfoot>
                 </table>
@@ -126,11 +187,62 @@ const AttributionTable = ({ title, items }: { title: string, items: TableItem[] 
     );
 };
 
+const aggregatePeriodData = (data: PortfolioItem[]): TableItem[] => {
+    if (data.length === 0) return [];
+
+    // Group by Ticker
+    const byTicker: Record<string, PortfolioItem[]> = {};
+    data.forEach(d => {
+        if (!byTicker[d.ticker]) byTicker[d.ticker] = [];
+        byTicker[d.ticker].push(d);
+    });
+
+    const results: TableItem[] = [];
+
+    Object.keys(byTicker).forEach(ticker => {
+        const items = byTicker[ticker];
+
+        // 1. Weight: End-of-Period Weight
+        // Find the item with the latest date (max date)
+        // Sort items by date ascending to find the last one easily
+        items.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        const lastItem = items[items.length - 1];
+        const endOfPeriodWeight = lastItem.weight;
+
+        // 2. Contribution: Sum of all particular contributions
+        const totalContrib = items.reduce((sum, item) => sum + (item.contribution || 0), 0);
+
+        // 3. Performance (Return): Weighted Average Return
+        // Formula: Sum(Weight_i * Return_i) / Sum(Weight_i)
+        let weightTimesReturnSum = 0;
+        let weightSum = 0;
+
+        items.forEach(item => {
+            const w = item.weight || 0;
+            const r = item.returnPct || 0;
+            weightTimesReturnSum += (w * r);
+            weightSum += w;
+        });
+
+        // Avoid division by zero
+        const weightedAvgReturn = weightSum > 0 ? (weightTimesReturnSum / weightSum) : 0;
+
+        results.push({
+            ticker,
+            weight: endOfPeriodWeight,
+            contribution: totalContrib,
+            returnPct: weightedAvgReturn
+        });
+    });
+
+    return results;
+};
+
 export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
     const [viewMode, setViewMode] = useState<'OVERVIEW' | 'MONTHLY' | 'QUARTERLY'>('OVERVIEW');
     const [timeRange, setTimeRange] = useState<'YTD' | 'Q1' | 'Q2' | 'Q3' | 'Q4'>('YTD');
 
-    const cleanData = useMemo(() => data.filter(d => !d.ticker.toUpperCase().includes('CASH') && !d.ticker.includes('$')), [data]);
+    const cleanData = useMemo(() => data, [data]);
 
     const { allMonths, primaryYear } = useMemo(() => {
         if (cleanData.length === 0) return { allMonths: [], primaryYear: new Date().getFullYear() };
@@ -415,22 +527,26 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
                     <h2 className="text-3xl font-bold font-mono text-wallstreet-text">Performance Attribution</h2>
                     <p className="text-wallstreet-500 mt-1 text-sm">Allocation vs. Selection Effect Analysis (Excl. Cash)</p>
                 </div>
-                <div className="flex p-1 bg-wallstreet-200 rounded-lg">
-                    <button onClick={() => setViewMode('OVERVIEW')} className={`px-4 py-2 rounded-md text-xs font-bold font-mono transition-all flex items-center gap-2 ${viewMode === 'OVERVIEW' ? 'bg-white text-wallstreet-accent shadow-sm' : 'text-wallstreet-500 hover:text-wallstreet-text'}`}><Grid size={14} /> Overview</button>
-                    <button onClick={() => setViewMode('MONTHLY')} className={`px-4 py-2 rounded-md text-xs font-bold font-mono transition-all flex items-center gap-2 ${viewMode === 'MONTHLY' ? 'bg-white text-wallstreet-accent shadow-sm' : 'text-wallstreet-500 hover:text-wallstreet-text'}`}><Calendar size={14} /> Monthly</button>
-                    <button onClick={() => setViewMode('QUARTERLY')} className={`px-4 py-2 rounded-md text-xs font-bold font-mono transition-all flex items-center gap-2 ${viewMode === 'QUARTERLY' ? 'bg-white text-wallstreet-accent shadow-sm' : 'text-wallstreet-500 hover:text-wallstreet-text'}`}><Layers size={14} /> Quarterly</button>
-                </div>
-            </header>
-
-            {viewMode === 'OVERVIEW' && (
-                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
-                    <div className="flex justify-end">
+                <div className="flex items-center gap-4">
+                    {/* Time Range Selector - Only visible in Overview */}
+                    {viewMode === 'OVERVIEW' && (
                         <div className="flex items-center bg-white border border-wallstreet-700 rounded-lg p-1 shadow-sm">
                             {['YTD', 'Q1', 'Q2', 'Q3', 'Q4'].map((period) => (
                                 <button key={period} onClick={() => setTimeRange(period as any)} className={`px-3 py-1.5 text-xs font-mono font-bold rounded transition-all ${timeRange === period ? 'bg-wallstreet-text text-white shadow-md' : 'text-wallstreet-500 hover:bg-slate-100'}`}>{period}</button>
                             ))}
                         </div>
+                    )}
+
+                    <div className="flex p-1 bg-wallstreet-200 rounded-lg">
+                        <button onClick={() => setViewMode('OVERVIEW')} className={`px-4 py-2 rounded-md text-xs font-bold font-mono transition-all flex items-center gap-2 ${viewMode === 'OVERVIEW' ? 'bg-white text-wallstreet-accent shadow-sm' : 'text-wallstreet-500 hover:text-wallstreet-text'}`}><Grid size={14} /> Overview</button>
+                        <button onClick={() => setViewMode('MONTHLY')} className={`px-4 py-2 rounded-md text-xs font-bold font-mono transition-all flex items-center gap-2 ${viewMode === 'MONTHLY' ? 'bg-white text-wallstreet-accent shadow-sm' : 'text-wallstreet-500 hover:text-wallstreet-text'}`}><Calendar size={14} /> Monthly</button>
+                        <button onClick={() => setViewMode('QUARTERLY')} className={`px-4 py-2 rounded-md text-xs font-bold font-mono transition-all flex items-center gap-2 ${viewMode === 'QUARTERLY' ? 'bg-white text-wallstreet-accent shadow-sm' : 'text-wallstreet-500 hover:text-wallstreet-text'}`}><Layers size={14} /> Quarterly</button>
                     </div>
+                </div>
+            </header>
+
+            {viewMode === 'OVERVIEW' && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         <KPICard title="Active Return" value={`${activeReturn > 0 ? '+' : ''}${activeReturn.toFixed(2)}%`} subtext="Total Portfolio Return" icon={null} colorClass={activeReturn >= 0 ? 'text-green-600' : 'text-red-600'} />
@@ -530,7 +646,7 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
                             <div className="flex-1 w-full min-h-[200px] flex items-center justify-center">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <BarChart layout="vertical" data={topMoversChartData.data} margin={{ top: 0, right: 30, left: 30, bottom: 0 }} barCategoryGap="20%">
-                                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9e3" />
                                         <XAxis type="number" domain={topMoversChartData.domain} hide />
                                         <YAxis type="category" dataKey="ticker" width={45} tick={{ fontSize: 10, fontFamily: 'monospace', fill: '#475569', fontWeight: 'bold' }} axisLine={false} tickLine={false} interval={0} />
                                         <Tooltip cursor={{ fill: '#f1f5f9' }} content={({ active, payload }) => {
@@ -660,7 +776,9 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
                             return dDate.getFullYear() === date.getFullYear() && dDate.getMonth() === date.getMonth() && !d.ticker.toUpperCase().includes('CASH');
                         });
                         if (monthlyData.length === 0) return null;
-                        const items = monthlyData.map(d => ({ ticker: d.ticker, weight: d.weight, returnPct: d.returnPct, contribution: d.contribution || 0 }));
+
+                        // Use aggregation helper
+                        const items = aggregatePeriodData(monthlyData);
                         return <AttributionTable key={date.toISOString()} title={date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} items={items} />;
                     })}
                 </div>
@@ -674,18 +792,13 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
                             const y = new Date(d.date).getFullYear();
                             return q.months.includes(m) && y === primaryYear;
                         });
-                        if (qData.length === 0) return null;
 
-                        const tickerMap = new Map<string, { ticker: string, weight: number, contribution: number, count: number, returnSum: number }>();
-                        qData.forEach(d => {
-                            if (!tickerMap.has(d.ticker)) tickerMap.set(d.ticker, { ticker: d.ticker, weight: 0, contribution: 0, count: 0, returnSum: 0 });
-                            const t = tickerMap.get(d.ticker)!;
-                            t.weight += d.weight;
-                            t.contribution += (d.contribution || 0);
-                            t.returnSum += (d.returnPct || 0);
-                            t.count += 1;
-                        });
-                        const aggregated: TableItem[] = Array.from(tickerMap.values()).map(t => ({ ticker: t.ticker, weight: t.weight / t.count, contribution: t.contribution, returnPct: t.returnSum }));
+                        // Check for completed quarter (needs 3 unique months of data)
+                        const uniqueMonths = new Set(qData.map(d => new Date(d.date).getMonth()));
+                        if (qData.length === 0 || uniqueMonths.size < 3) return null;
+
+                        // Use aggregation helper
+                        const aggregated = aggregatePeriodData(qData);
                         return <AttributionTable key={q.name} title={`${q.name} ${primaryYear}`} items={aggregated} />
                     })}
                 </div>

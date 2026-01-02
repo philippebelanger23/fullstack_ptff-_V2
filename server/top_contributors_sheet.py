@@ -229,7 +229,7 @@ def create_table(ws, table_start_col, start_row, month_name, month_df, is_quarte
     ws.merge_cells(f'{get_column_letter(month_header_col)}{current_row}:{get_column_letter(month_header_end_col)}{current_row + 1}')
     month_header_cell = ws[f'{get_column_letter(month_header_col)}{current_row}']
     month_header_cell.value = month_name
-    month_header_cell.font = Font(name='Aptos', size=12, bold=True, color='FFFFFF')
+    month_header_cell.font = Font(name='Aptos', size=15, bold=True, color='FFFFFF')
     month_header_cell.fill = PatternFill(start_color='000000', end_color='000000', fill_type='solid')
     month_header_cell.alignment = Alignment(horizontal='center', vertical='center')
     

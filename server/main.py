@@ -105,9 +105,10 @@ async def analyze_portfolio(
             
         # Iterate through each period to create time-series data for the client
         for i, period in enumerate(periods):
-            start_date_ts = period[0] # Timestamp
+            # Use period END date to match Excel logic (top_contributors_sheet.py)
+            end_date_ts = period[1] # Timestamp
             # Format date as YYYY-MM-DD for consistency
-            date_str = start_date_ts.strftime("%Y-%m-%d")
+            date_str = end_date_ts.strftime("%Y-%m-%d")
             
             for _, row in df.iterrows():
                 ticker = row['Ticker']
@@ -406,6 +407,71 @@ async def currency_performance(request: dict):
     except Exception as e:
         logger.error(f"Error in currency-performance: {e}")
         return {}
+
+
+
+@app.post("/fetch-betas")
+async def fetch_betas(request: dict):
+    tickers = request.get("tickers", [])
+    if not tickers:
+        return {}
+    
+    import yfinance as yf
+    
+    unique_tickers = list(set([t.strip() for t in tickers if t and isinstance(t, str)]))
+    results = {}
+    
+    # Heuristic for obvious funds/ETFs where we want Beta = 1.0 immediately without fetching
+    
+    to_fetch = []
+    
+    for ticker in unique_tickers:
+        t_upper = ticker.upper()
+        # Heuristics for Funds/ETFs to default to 1.0
+        if (t_upper.startswith('TDB') or 
+            t_upper.startswith('DYN') or 
+            (t_upper.startswith('X') and t_upper.endswith('.TO')) or
+            (t_upper.startswith('V') and t_upper.endswith('.TO')) or
+            (t_upper.startswith('Z') and t_upper.endswith('.TO')) or
+            (t_upper.startswith('H') and t_upper.endswith('.TO')) or 
+            'CASH' in t_upper or 
+            '$' in t_upper):
+            results[ticker] = 1.0
+        else:
+            to_fetch.append(ticker)
+            
+    if to_fetch:
+        try:
+            tickers_obj = yf.Tickers(" ".join(to_fetch))
+            
+            for ticker in to_fetch:
+                try:
+                    found_ticker = tickers_obj.tickers.get(ticker)
+                    if not found_ticker:
+                        found_ticker = yf.Ticker(ticker)
+                        
+                    # Use fast_info if possible, or info
+                    # beta is in info
+                    info = found_ticker.info
+                    
+                    quote_type = info.get('quoteType', '').upper()
+                    if quote_type in ['ETF', 'MUTUALFUND']:
+                        results[ticker] = 1.0
+                    else:
+                        beta = info.get('beta')
+                        if beta is not None:
+                            results[ticker] = beta
+                        else:
+                            results[ticker] = 1.0
+                            
+                except Exception as e:
+                    logger.warning(f"Failed to fetch beta for {ticker}: {e}")
+                    results[ticker] = 1.0 
+                    
+        except Exception as e:
+            logger.error(f"Error fetching betas: {e}")
+            
+    return results
 
 
 if __name__ == "__main__":

@@ -4,9 +4,10 @@ import { PortfolioItem } from '../types';
 interface PortfolioTableProps {
   currentHoldings: PortfolioItem[];
   allData: PortfolioItem[];
+  betaMap?: Record<string, number>;
 }
 
-export const PortfolioTable: React.FC<PortfolioTableProps> = ({ currentHoldings }) => {
+export const PortfolioTable: React.FC<PortfolioTableProps> = ({ currentHoldings, betaMap }) => {
   const sortedData = [...currentHoldings].sort((a, b) => b.weight - a.weight);
 
   // Helper to determine Region
@@ -54,7 +55,6 @@ export const PortfolioTable: React.FC<PortfolioTableProps> = ({ currentHoldings 
     <div className="bg-white rounded-xl border border-wallstreet-700 overflow-hidden shadow-sm">
       <div className="p-4 border-b border-wallstreet-700 flex justify-between items-center bg-wallstreet-50">
         <h3 className="font-mono text-lg font-bold text-wallstreet-text">Holdings Breakdown</h3>
-        <span className="text-xs font-mono text-wallstreet-500 font-bold">{currentHoldings.length} POSITIONS</span>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm text-wallstreet-500 font-mono">
@@ -64,14 +64,15 @@ export const PortfolioTable: React.FC<PortfolioTableProps> = ({ currentHoldings 
               <th className="px-6 py-3">Ticker</th>
               <th className="px-6 py-3 text-right">Weight</th>
               <th className="px-6 py-3 text-center">Location</th>
+              <th className="px-6 py-3 text-center">Beta</th>
               <th className="px-6 py-3 text-center">Sector</th>
-              <th className="px-6 py-3 text-center">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {sortedData.map((item, index) => {
               const region = getRegion(item.ticker);
               const sector = getSector(item);
+              const beta = betaMap && betaMap[item.ticker] !== undefined ? betaMap[item.ticker] : (item.sector === 'CASH' ? 0 : 1);
 
               return (
                 <tr key={index} className="hover:bg-blue-50/30 transition-colors group">
@@ -94,13 +95,11 @@ export const PortfolioTable: React.FC<PortfolioTableProps> = ({ currentHoldings 
                       </span>
                     )}
                   </td>
+                  <td className="px-6 py-4 text-center font-mono text-wallstreet-text">
+                    <span className={`font-bold ${beta > 1.2 ? 'text-red-600' : 'text-slate-600'}`}>{beta.toFixed(2)}</span>
+                  </td>
                   <td className="px-6 py-4 text-center font-bold text-wallstreet-text">
                     {sector}
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <button className="text-[10px] uppercase tracking-wider font-bold border border-wallstreet-200 px-3 py-1.5 rounded-md text-wallstreet-500 hover:border-wallstreet-accent hover:text-white hover:bg-wallstreet-accent transition-all shadow-sm">
-                      Analyze
-                    </button>
                   </td>
                 </tr>
               );

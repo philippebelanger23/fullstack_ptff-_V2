@@ -55,14 +55,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data }) => {
   // Separate state for sector map - persists independently of data changes
   const [sectorMap, setSectorMap] = React.useState<Record<string, string>>({});
 
-  // Fetch Sectors effect - only fetches, doesn't modify data
+  const [betaMap, setBetaMap] = React.useState<Record<string, number>>({});
+
+  // Fetch Sectors and Betas effect
   React.useEffect(() => {
-    const fetchSectorData = async () => {
-      // Get unique tickers that don't already have sector in our map
+    const fetchData = async () => {
+      // Get unique tickers
       const tickersToFetch = Array.from(
         new Set(
           data
-            .filter(d => d.ticker && !d.ticker.includes('$') && !sectorMap[d.ticker.trim()])
+            .filter(d => d.ticker && !d.ticker.includes('$'))
             .map(d => d.ticker.trim())
         )
       );
@@ -70,19 +72,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data }) => {
       if (tickersToFetch.length === 0) return;
 
       try {
-        const { fetchSectors } = await import('../services/api');
-        const sectors = await fetchSectors(tickersToFetch);
+        const { fetchSectors, fetchBetas } = await import('../services/api');
 
+        // Fetch Sectors
+        // We optimize by checking if we need to fetch, but api.ts handles some caching too.
+        // However, for betaMap, we don't have a persisted cache yet in api.ts so we fetch here.
+        // Ideally we check if we already have it in state, but simpler to just fetch all unique for now.
+        // (Optimization: only fetch missing)
+
+        const sectors = await fetchSectors(tickersToFetch);
         if (Object.keys(sectors).length > 0) {
           setSectorMap(prev => ({ ...prev, ...sectors }));
         }
+
+        const betas = await fetchBetas(tickersToFetch);
+        if (Object.keys(betas).length > 0) {
+          setBetaMap(betas);
+        }
+
       } catch (error) {
-        console.error("Error fetching sectors:", error);
+        console.error("Error fetching data:", error);
       }
     };
 
     if (data.length > 0) {
-      fetchSectorData();
+      fetchData();
     }
   }, [data]);
 
@@ -157,7 +171,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data }) => {
               <div className="w-px h-8 bg-wallstreet-100"></div>
               <div className="flex-1 flex flex-col items-center justify-center">
                 <div className="flex items-center gap-1.5 mb-1"><span className="text-xs font-extrabold text-slate-600 uppercase tracking-wider">Top 10</span></div>
-                <span className="text-xl font-bold text-wallstreet-text font-mono">{top10TotalWeight.toFixed(0)}%</span>
+                <span className="text-xl font-bold text-wallstreet-text font-mono">{top10TotalWeight.toFixed(2)}%</span>
               </div>
             </div> as any
           }
@@ -193,17 +207,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data }) => {
                 <div className="flex w-full items-center mt-1">
                   <div className="flex-1 flex flex-col items-center justify-center">
                     <div className="flex items-center gap-1.5 mb-1"><span className="text-xs font-extrabold text-slate-600 uppercase tracking-wider">USD</span></div>
-                    <span className="text-xl font-bold text-blue-600 font-mono">{usWeight.toFixed(1)}%</span>
+                    <span className="text-xl font-bold text-blue-600 font-mono">{usWeight.toFixed(2)}%</span>
                   </div>
                   <div className="w-px h-8 bg-wallstreet-100"></div>
                   <div className="flex-1 flex flex-col items-center justify-center">
                     <div className="flex items-center gap-1.5 mb-1"><span className="text-xs font-extrabold text-slate-600 uppercase tracking-wider">CAD</span></div>
-                    <span className="text-xl font-bold text-red-600 font-mono">{cadWeight.toFixed(1)}%</span>
+                    <span className="text-xl font-bold text-red-600 font-mono">{cadWeight.toFixed(2)}%</span>
                   </div>
                   <div className="w-px h-8 bg-wallstreet-100"></div>
                   <div className="flex-1 flex flex-col items-center justify-center">
                     <div className="flex items-center gap-1.5 mb-1"><span className="text-xs font-extrabold text-slate-600 uppercase tracking-wider">INTL</span></div>
-                    <span className="text-xl font-bold text-slate-600 font-mono">{intlWeight.toFixed(1)}%</span>
+                    <span className="text-xl font-bold text-slate-600 font-mono">{intlWeight.toFixed(2)}%</span>
                   </div>
                 </div> as any
               }
@@ -219,7 +233,29 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data }) => {
             <div className="flex w-full items-center mt-1">
               <div className="flex-1 flex flex-col items-center justify-center">
                 <div className="flex items-center gap-1.5 mb-1"><span className="text-xs font-extrabold text-slate-600 uppercase tracking-wider">Beta</span></div>
-                <span className="text-xl font-bold text-wallstreet-text font-mono">1.12</span>
+                <span className="text-xl font-bold text-wallstreet-text font-mono">
+                  {(() => {
+                    const investedWeight = totalWeight - enrichedCurrentHoldings.filter(h => h.sector === 'CASH').reduce((sum, h) => sum + h.weight, 0);
+                    // Calculate weighted beta relative to invested capital, not total capital (usually)
+                    // Or relative to total? Usually portfolio beta = sum(weight_i * beta_i).
+                    // If cash has beta=0.
+                    let weightedBetaSum = 0;
+                    enrichedCurrentHoldings.forEach(item => {
+                      const beta = betaMap[item.ticker] || 1.0; // Default to 1 if missing for calculation safety, or 0? 1 is safer assumption for equity.
+                      // Actually, if it's cash, beta is 0.
+                      let effectiveBeta = beta;
+                      if (item.sector === 'CASH') effectiveBeta = 0;
+
+                      // We use the raw weight (e.g. 50% = 50) so we divide by totalWeight later or 100
+                      // Our weights sum to ~100.
+                      weightedBetaSum += (item.weight * effectiveBeta);
+                    });
+                    // If totalWeight is ~100, we divide by 100.
+                    // If totalWeight is < 100 (e.g. 99.8), it's close enough.
+                    // If we want it strictly standard:
+                    return (weightedBetaSum / 100).toFixed(2);
+                  })()}
+                </span>
               </div>
               <div className="w-px h-8 bg-wallstreet-100"></div>
               <div className="flex-1 flex flex-col items-center justify-center">
@@ -238,7 +274,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data }) => {
         <PortfolioEvolutionChart data={areaChartData} topTickers={topTickers} dates={dates} colors={COLORS} />
       </div>
 
-      <PortfolioTable currentHoldings={enrichedCurrentHoldings} allData={data} />
+      <PortfolioTable currentHoldings={enrichedCurrentHoldings} allData={data} betaMap={betaMap} />
     </div>
   );
 };
