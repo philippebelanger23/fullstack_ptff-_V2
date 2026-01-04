@@ -149,3 +149,18 @@ export const fetchBetas = async (tickers: string[]): Promise<Record<string, numb
         return {};
     }
 };
+
+export const fetchIndexHistory = async (): Promise<Record<string, { date: string, value: number }[]>> => {
+    try {
+        const response = await fetch(`${API_Base_URL}/index-history`);
+        if (response.ok) {
+            return await response.json();
+        } else {
+            console.error('Failed to fetch index history');
+            return { "ACWI": [], "XIU.TO": [] };
+        }
+    } catch (error) {
+        console.error("Error fetching index history:", error);
+        return { "ACWI": [], "XIU.TO": [] };
+    }
+};

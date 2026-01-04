@@ -353,44 +353,99 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
             .slice(0, 10);
 
         return top10.map(s => {
-            const shareOfTotal = totalPortfolioContrib !== 0 ? (s.totalContrib / totalPortfolioContrib) : 0;
+            // Y Axis is now Absolute Contribution %
             return {
                 ticker: s.ticker,
-                x: s.latestWeight, // Use latestWeight explicitly for X-axis
-                y: shareOfTotal * 100, // Share of Total Return %
+                x: s.latestWeight,
+                y: s.totalContrib, // Absolute Contribution %
                 absoluteContrib: s.totalContrib,
                 z: 1
             };
         });
     }, [tickerStats]);
 
-    // Calculate max domain for consistent 1:1 line rendering
-    // Calculate max domain for consistent 1:1 line rendering
-    const { maxDomain, axisTicks } = useMemo(() => {
-        if (capitalEfficiencyData.length === 0) return { maxDomain: 10, axisTicks: [0, 2, 4, 6, 8, 10] };
+    // Calculate dynamic domains for X and Y to maximize graph space usage with constant increments
+    const { xDomain, xTicks, yDomain, yTicks, portfolioReturn } = useMemo(() => {
+        // Calculate Portfolio Return for Reference Line Slope
+        const totalPortRet = tickerStats.reduce((sum, t) => sum + t.totalContrib, 0);
 
-        const maxX = Math.max(...capitalEfficiencyData.map(d => d.x));
-        const maxY = Math.max(...capitalEfficiencyData.map(d => d.y));
-        const rawMax = Math.max(maxX, maxY) * 1.05; // Reduced buffering to 5%
+        if (capitalEfficiencyData.length === 0) return { xDomain: [0, 10], xTicks: [0, 2, 4, 6, 8, 10], yDomain: [0, 10], yTicks: [0, 2, 4, 6, 8, 10], portfolioReturn: totalPortRet };
 
-        // Find nice step size to ensure constant integer steps
-        // Try to target roughly 4-6 intervals
-        let step = 1;
-        if (rawMax > 40) step = 10;
-        else if (rawMax > 20) step = 5;
-        else if (rawMax > 8) step = 2; // e.g. max 14 -> steps of 2 -> 0, 2, 4... 14
-        else step = 1;
+        const minX = 0; // Weights are always positive
+        const maxX = Math.max(0, ...capitalEfficiencyData.map(d => d.x));
 
-        const niceMax = Math.ceil(rawMax / step) * step;
+        const minY = Math.min(0, ...capitalEfficiencyData.map(d => d.y));
+        const maxY = Math.max(0, ...capitalEfficiencyData.map(d => d.y));
 
-        // Generate ticks
-        const ticks = [];
-        for (let i = 0; i <= niceMax; i += step) {
-            ticks.push(i);
+        const getTicks = (minVal: number, maxVal: number) => {
+            // Determine range to find step size
+            const range = maxVal - minVal;
+            const absMax = Math.max(Math.abs(minVal), Math.abs(maxVal));
+
+            let step = 1;
+            if (absMax > 100) step = 20;
+            else if (absMax > 50) step = 10;
+            else if (absMax > 25) step = 5;
+            else if (absMax > 8) step = 2; // Granular step for small contributions
+            else if (absMax > 2) step = 0.5; // Very granular for small contribs
+            else step = 0.1;
+
+            // Round min/max to nearest step
+            const niceMin = Math.floor(minVal / step) * step;
+            const niceMax = Math.ceil(maxVal / step) * step;
+
+            const ticks: number[] = [];
+            // Use epsilon to avoid float artifacts
+            for (let i = niceMin; i <= niceMax + (step / 1000); i += step) {
+                ticks.push(Number(i.toFixed(2))); // Keep 2 decimals for small contribs if needed
+            }
+            return { domain: [niceMin, niceMax], ticks };
+        };
+
+        const xData = getTicks(minX, maxX); // X is always 0 to Max
+        const yData = getTicks(minY, maxY); // Y can be negative (No buffer needed if ticks align)
+
+        return { xDomain: xData.domain, xTicks: xData.ticks, yDomain: yData.domain, yTicks: yData.ticks, portfolioReturn: totalPortRet };
+    }, [capitalEfficiencyData, tickerStats]);
+
+    const diagonalEndpoint = useMemo(() => {
+        // Line Equation: y = x * (PortfolioReturn / 100)
+        // We start at (0,0). We need to find where this line intersects the bounding box defined by domains.
+        // Slope m
+        const m = portfolioReturn / 100;
+
+        // Bounding Box
+        const xMin = xDomain[0] as number;
+        const xMax = xDomain[1] as number;
+        const yMin = yDomain[0] as number;
+        const yMax = yDomain[1] as number;
+
+        // Candidates for end point:
+        // 1. Right Wall (x = xMax) -> y = m * xMax
+        const yAtRight = m * xMax;
+        if (yAtRight >= yMin && yAtRight <= yMax) {
+            return [{ x: 0, y: 0 }, { x: xMax, y: yAtRight }];
         }
 
-        return { maxDomain: niceMax, axisTicks: ticks };
-    }, [capitalEfficiencyData]);
+        // 2. Top Wall (y = yMax) -> x = yMax / m (Only if m > 0)
+        if (m > 0) {
+            const xAtTop = yMax / m;
+            if (xAtTop >= xMin && xAtTop <= xMax) {
+                return [{ x: 0, y: 0 }, { x: xAtTop, y: yMax }];
+            }
+        }
+
+        // 3. Bottom Wall (y = yMin) -> x = yMin / m (Only if m < 0)
+        if (m < 0) {
+            const xAtBottom = yMin / m;
+            if (xAtBottom >= xMin && xAtBottom <= xMax) {
+                return [{ x: 0, y: 0 }, { x: xAtBottom, y: yMin }];
+            }
+        }
+
+        // Fallback default (should be covered by above unless 0 slope)
+        return [{ x: 0, y: 0 }, { x: xMax, y: 0 }];
+    }, [xDomain, yDomain, portfolioReturn]);
 
     const matrixData = sortedByContrib.map(stat => {
         const row: any = { ticker: stat.ticker, total: stat.totalContrib, latestWeight: stat.latestWeight }; // Use latestWeight explicitly
@@ -591,13 +646,13 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
 
                         <div className="lg:col-span-4 flex flex-col md:gap-4 gap-4 h-full">
                             <div className="bg-white p-4 rounded-xl border border-wallstreet-700 shadow-sm flex-1 flex flex-col min-h-[220px]">
-                                <h3 className="font-mono font-bold text-wallstreet-text uppercase tracking-wider text-xs flex items-center gap-2 mb-2"><Scale size={14} className="text-wallstreet-500" /> Capital Efficiency (Top 10)</h3>
+                                <h3 className="font-mono font-bold text-wallstreet-text uppercase tracking-wider text-xs flex items-center gap-2 mb-2"><Scale size={14} className="text-wallstreet-500" /> Capital Efficiency (Top 10 Holdings)</h3>
                                 <div className="flex-1 w-full">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <ScatterChart margin={{ top: 10, right: 10, bottom: 10, left: 0 }}>
                                             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                                            <XAxis type="number" dataKey="x" name="Weight" unit="%" tick={{ fontSize: 10 }} tickFormatter={(val: number) => `${val.toFixed(1)}`} label={{ value: 'Weight %', position: 'bottom', offset: 0, fontSize: 10 }} domain={[0, maxDomain]} allowDecimals={false} ticks={axisTicks} />
-                                            <YAxis type="number" dataKey="y" name="Share of Return" unit="%" tick={{ fontSize: 10 }} tickFormatter={(val: number) => `${val.toFixed(1)}`} label={{ value: 'Share of Return %', angle: -90, position: 'insideLeft', fontSize: 10 }} domain={[0, maxDomain]} allowDecimals={false} ticks={axisTicks} />
+                                            <XAxis type="number" dataKey="x" name="Weight" unit="%" tick={{ fontSize: 10 }} tickFormatter={(val: number) => `${val.toFixed(1)}`} label={{ value: 'Weight %', position: 'bottom', offset: 0, fontSize: 10 }} domain={xDomain} allowDecimals={false} ticks={xTicks} />
+                                            <YAxis type="number" dataKey="y" name="Contribution" unit="%" tick={{ fontSize: 10 }} tickFormatter={(val: number) => `${val.toFixed(1)}`} label={{ value: 'Contribution %', angle: -90, position: 'insideLeft', fontSize: 10 }} domain={yDomain} allowDecimals={false} ticks={yTicks} />
                                             <Tooltip cursor={{ strokeDasharray: '3 3' }} content={({ active, payload }) => {
                                                 if (active && payload && payload.length) {
                                                     const d = payload[0].payload;
@@ -613,8 +668,8 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
                                                                 <span className="text-slate-500 font-medium text-left">Weight:</span>
                                                                 <span className="text-right font-bold text-slate-700">{d.x.toFixed(2)}%</span>
 
-                                                                <span className="text-slate-500 font-medium text-left">Share of Return %:</span>
-                                                                <span className={`text-right font-bold ${d.y < d.x ? 'text-red-600' : 'text-green-600'}`}>
+                                                                <span className="text-slate-500 font-medium text-left">Contrib %:</span>
+                                                                <span className={`text-right font-bold ${d.y < 0 ? 'text-red-700' : 'text-green-700'}`}>
                                                                     {d.y.toFixed(2)}%
                                                                 </span>
                                                             </div>
@@ -623,14 +678,17 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
                                                 }
                                                 return null;
                                             }} />
-                                            {/* Horizontal Reference Line at 0 */}
-                                            <ReferenceLine y={0} stroke="#94a3b8" />
-                                            {/* Dynamic Reference Line 0,0 to max,max to show 1:1 efficiency ratio */}
-                                            <ReferenceLine segment={[{ x: 0, y: 0 }, { x: maxDomain, y: maxDomain }]} stroke="#94a3b8" strokeDasharray="3 3" />
+                                            {/* Reference Line at Expected Contribution (y = Weight * PortfolioReturn) */}
+                                            <ReferenceLine segment={diagonalEndpoint} stroke="#94a3b8" strokeDasharray="3 3" />
                                             <Scatter name="Tickers" data={capitalEfficiencyData} fill="#004dea">
-                                                {capitalEfficiencyData.map((entry, index) => (
-                                                    <Cell key={`cell-${index}`} fill={entry.y > entry.x ? '#16a34a' : '#dc2626'} />
-                                                ))}
+                                                {capitalEfficiencyData.map((entry, index) => {
+                                                    // Visual Logic Logic:
+                                                    // Efficient if Contribution > Expected Contribution (Weight * Portfolio Return)
+                                                    // Expected Y = x * (activeReturn / 100)
+                                                    const expectedContrib = (entry.x / 100) * activeReturn;
+                                                    const isEfficient = entry.y > expectedContrib;
+                                                    return <Cell key={`cell-${index}`} fill={isEfficient ? '#16a34a' : '#dc2626'} />;
+                                                })}
                                                 <LabelList dataKey="ticker" position="top" style={{ fontSize: '10px', fontWeight: 'bold', fontFamily: 'monospace', fill: '#1e293b' }} offset={5} />
                                             </Scatter>
                                         </ScatterChart>
@@ -641,7 +699,7 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
 
                         <div className="lg:col-span-3 bg-white p-4 rounded-xl border border-wallstreet-700 shadow-sm flex flex-col">
                             <div className="mb-2">
-                                <h3 className="font-mono font-bold text-wallstreet-text uppercase tracking-wider text-xs flex items-center gap-2"><Activity size={14} className="text-wallstreet-500" /> Top Movers (%)</h3>
+                                <h3 className="font-mono font-bold text-wallstreet-text uppercase tracking-wider text-xs flex items-center gap-2"><Activity size={14} className="text-wallstreet-500" /> Best & Worst Performers (%)</h3>
                             </div>
                             <div className="flex-1 w-full min-h-[200px] flex items-center justify-center">
                                 <ResponsiveContainer width="100%" height="100%">
@@ -766,43 +824,48 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
                         </div>
                     </div>
                 </div>
-            )}
+            )
+            }
 
-            {viewMode === 'MONTHLY' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-2">
-                    {allMonths.map((date) => {
-                        const monthlyData = data.filter(d => {
-                            const dDate = new Date(d.date);
-                            return dDate.getFullYear() === date.getFullYear() && dDate.getMonth() === date.getMonth() && !d.ticker.toUpperCase().includes('CASH');
-                        });
-                        if (monthlyData.length === 0) return null;
+            {
+                viewMode === 'MONTHLY' && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-2">
+                        {allMonths.map((date) => {
+                            const monthlyData = data.filter(d => {
+                                const dDate = new Date(d.date);
+                                return dDate.getFullYear() === date.getFullYear() && dDate.getMonth() === date.getMonth() && !d.ticker.toUpperCase().includes('CASH');
+                            });
+                            if (monthlyData.length === 0) return null;
 
-                        // Use aggregation helper
-                        const items = aggregatePeriodData(monthlyData);
-                        return <AttributionTable key={date.toISOString()} title={date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} items={items} />;
-                    })}
-                </div>
-            )}
+                            // Use aggregation helper
+                            const items = aggregatePeriodData(monthlyData);
+                            return <AttributionTable key={date.toISOString()} title={date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} items={items} />;
+                        })}
+                    </div>
+                )
+            }
 
-            {viewMode === 'QUARTERLY' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-bottom-2">
-                    {[{ name: 'Q1', months: [0, 1, 2] }, { name: 'Q2', months: [3, 4, 5] }, { name: 'Q3', months: [6, 7, 8] }, { name: 'Q4', months: [9, 10, 11] }].map(q => {
-                        const qData = cleanData.filter(d => {
-                            const m = new Date(d.date).getMonth();
-                            const y = new Date(d.date).getFullYear();
-                            return q.months.includes(m) && y === primaryYear;
-                        });
+            {
+                viewMode === 'QUARTERLY' && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-bottom-2">
+                        {[{ name: 'Q1', months: [0, 1, 2] }, { name: 'Q2', months: [3, 4, 5] }, { name: 'Q3', months: [6, 7, 8] }, { name: 'Q4', months: [9, 10, 11] }].map(q => {
+                            const qData = cleanData.filter(d => {
+                                const m = new Date(d.date).getMonth();
+                                const y = new Date(d.date).getFullYear();
+                                return q.months.includes(m) && y === primaryYear;
+                            });
 
-                        // Check for completed quarter (needs 3 unique months of data)
-                        const uniqueMonths = new Set(qData.map(d => new Date(d.date).getMonth()));
-                        if (qData.length === 0 || uniqueMonths.size < 3) return null;
+                            // Check for completed quarter (needs 3 unique months of data)
+                            const uniqueMonths = new Set(qData.map(d => new Date(d.date).getMonth()));
+                            if (qData.length === 0 || uniqueMonths.size < 3) return null;
 
-                        // Use aggregation helper
-                        const aggregated = aggregatePeriodData(qData);
-                        return <AttributionTable key={q.name} title={`${q.name} ${primaryYear}`} items={aggregated} />
-                    })}
-                </div>
-            )}
-        </div>
+                            // Use aggregation helper
+                            const aggregated = aggregatePeriodData(qData);
+                            return <AttributionTable key={q.name} title={`${q.name} ${primaryYear}`} items={aggregated} />
+                        })}
+                    </div>
+                )
+            }
+        </div >
     );
 };

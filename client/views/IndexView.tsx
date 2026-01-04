@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Globe, DollarSign, Map as MapIcon, Zap } from 'lucide-react';
-import { fetchIndexExposure, fetchCurrencyPerformance } from '../services/api';
+import { Globe, DollarSign, Map as MapIcon, Zap, TrendingUp } from 'lucide-react';
+import { fetchIndexExposure, fetchCurrencyPerformance, fetchIndexHistory } from '../services/api';
 import { CountryTreemap } from '../components/CountryTreemap';
 import { ClevelandDotPlot } from '../components/ClevelandDotPlot';
+import { IndexPerformanceChart } from '../components/IndexPerformanceChart';
 
 export const IndexView: React.FC = () => {
     const [exposure, setExposure] = useState<{ sectors: any[], geography: any[], raw?: any }>({ sectors: [], geography: [] });
     const [currencyPerf, setCurrencyPerf] = useState<Record<string, Record<string, number>>>({});
+    const [indexHistory, setIndexHistory] = useState<Record<string, { date: string, value: number }[]>>({});
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -19,6 +21,10 @@ export const IndexView: React.FC = () => {
             // Fetch currency performance
             const perf = await fetchCurrencyPerformance(["USDCAD=X", "JPYCAD=X", "EURCAD=X"]);
             setCurrencyPerf(perf);
+
+            // Fetch index history
+            const history = await fetchIndexHistory();
+            setIndexHistory(history);
 
             setLoading(false);
         };
@@ -94,6 +100,20 @@ export const IndexView: React.FC = () => {
                 </div>
             </div>
 
+            {/* Top Row: Index Performance Graph */}
+            <div className="bg-white p-6 rounded-xl border border-wallstreet-700 shadow-sm flex flex-col h-[400px]">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-bold font-mono text-wallstreet-text flex items-center gap-2">
+                        <TrendingUp size={20} className="text-wallstreet-accent" />
+                        Index Performance (5Y)
+                    </h3>
+                </div>
+                <div className="flex-1 w-full min-h-0">
+                    <IndexPerformanceChart data={indexHistory} />
+                </div>
+            </div>
+
+            {/* Middle Row: Sector & Geography */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <div className="bg-white p-6 rounded-xl border border-wallstreet-700 shadow-sm flex flex-col h-[500px]">
                     <div className="flex justify-between items-center mb-6">
@@ -122,18 +142,28 @@ export const IndexView: React.FC = () => {
                 </div>
             </div>
 
-            <div className="space-y-6">
-                <h2 className="text-xl font-bold font-mono text-wallstreet-text border-b border-wallstreet-700 pb-2 flex items-center gap-2"><Zap size={20} className="text-wallstreet-accent" /> Geographic & Currency Breakdown</h2>
+            {/* Bottom Row: Combined Regional & Currency Breakdown */}
+            <div className="bg-white p-6 rounded-xl border border-wallstreet-700 shadow-sm">
+                <div className="mb-6 flex flex-col sm:flex-row justify-between items-baseline border-b border-wallstreet-100 pb-4">
+                    <h2 className="text-xl font-bold font-mono text-wallstreet-text flex items-center gap-2">
+                        <Zap size={20} className="text-wallstreet-accent" />
+                        Exposure Analysis
+                    </h2>
+                    <span className="text-sm text-wallstreet-500 mt-2 sm:mt-0">Breakdown by Region and Currency</span>
+                </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <div className="bg-white p-6 rounded-xl border border-wallstreet-700 shadow-sm flex flex-col">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
+                    {/* Regional Allocation Column */}
+                    <div className="flex flex-col">
                         <div className="mb-4">
-                            <h3 className="text-lg font-bold font-mono text-wallstreet-text flex items-center gap-2"><MapIcon size={18} /> Regional Allocation</h3>
-                            <p className="text-xs text-wallstreet-500">Composite geographic exposure from underlying ETFs.</p>
+                            <h3 className="text-base font-bold font-mono text-wallstreet-text flex items-center gap-2 text-wallstreet-600">
+                                <MapIcon size={16} /> Regional Allocation
+                            </h3>
+                            <p className="text-xs text-wallstreet-400">Composite geographic exposure.</p>
                         </div>
                         <div className="flex-1 overflow-auto">
                             <table className="w-full text-sm font-mono">
-                                <thead className="bg-wallstreet-100 text-wallstreet-500 text-xs uppercase">
+                                <thead className="bg-wallstreet-50 text-wallstreet-500 text-xs uppercase">
                                     <tr>
                                         <th className="p-2 text-left">Region</th>
                                         <th className="p-2 text-right">Exposure</th>
@@ -158,17 +188,20 @@ export const IndexView: React.FC = () => {
                         </div>
                     </div>
 
-                    <div className="bg-white p-6 rounded-xl border border-wallstreet-700 shadow-sm flex flex-col">
+                    {/* Currency Exposure Column */}
+                    <div className="flex flex-col">
                         <div className="mb-4">
-                            <h3 className="text-lg font-bold font-mono text-wallstreet-text flex items-center gap-2"><DollarSign size={18} /> Currency Exposure</h3>
-                            <p className="text-xs text-wallstreet-500">Derived from geographic allocation.</p>
+                            <h3 className="text-base font-bold font-mono text-wallstreet-text flex items-center gap-2 text-wallstreet-600">
+                                <DollarSign size={16} /> Currency Exposure
+                            </h3>
+                            <p className="text-xs text-wallstreet-400">Derived from geographic allocation.</p>
                         </div>
                         <div className="flex-1">
                             <table className="w-full text-sm font-mono table-fixed">
-                                <thead className="bg-wallstreet-100 text-wallstreet-500 text-xs uppercase">
+                                <thead className="bg-wallstreet-50 text-wallstreet-500 text-xs uppercase">
                                     <tr>
-                                        <th className="p-2 text-left w-[10%]">Currency</th>
-                                        <th className="p-2 text-center w-[25%]">Exposure</th>
+                                        <th className="p-2 text-left w-[15%]">Curr</th>
+                                        <th className="p-2 text-center w-[25%]">Exp</th>
                                         <th className="p-2 text-center text-xs text-wallstreet-400 w-[15%]">YTD</th>
                                         <th className="p-2 text-center text-xs text-wallstreet-400 w-[15%]">3M</th>
                                         <th className="p-2 text-center text-xs text-wallstreet-400 w-[15%]">6M</th>

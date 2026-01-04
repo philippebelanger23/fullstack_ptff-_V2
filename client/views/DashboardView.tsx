@@ -228,7 +228,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data }) => {
         })()}
 
         <KPICard
-          title="Risk Metrics"
+          title="Risk Metrics (Dummy Data)"
           value={
             <div className="flex w-full items-center mt-1">
               <div className="flex-1 flex flex-col items-center justify-center">

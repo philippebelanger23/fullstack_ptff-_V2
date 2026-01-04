@@ -473,6 +473,95 @@ async def fetch_betas(request: dict):
             
     return results
 
+@app.get("/index-history")
+async def get_index_history():
+    """
+    Fetch historical data for ACWI (global) and XIU.TO (Canada) for the comparison graph.
+    Caches the result to avoid repeated slow yfinance calls.
+    """
+    import yfinance as yf
+    import json
+    import datetime
+    
+    cache_file = Path("data/index_history_cache.json")
+    
+    # Check cache freshness (e.g., 24 hours)
+    if cache_file.exists():
+        try:
+            # Check modification time
+            mtime = datetime.datetime.fromtimestamp(cache_file.stat().st_mtime)
+            if datetime.datetime.now() - mtime < datetime.timedelta(hours=24):
+                with open(cache_file, "r") as f:
+                    logger.info("Serving index history from cache")
+                    return json.load(f)
+        except Exception as e:
+            logger.warning(f"Failed to read index history cache: {e}")
+
+    # Fetch new data
+    logger.info("Fetching fresh index history from yfinance...")
+    tickers = ["ACWI", "XIU.TO"]
+    
+    try:
+        # Fetch 5 years of data to be safe, daily interval
+        data = yf.download(tickers, period="5y", interval="1d", progress=False)
+        
+        # yfinance download with multiple tickers returns a MultiIndex columns dataframe
+        # We need to flatten it.
+        # Structure is typically:
+        #             Close             
+        # Ticker      ACWI   XIU.TO
+        # Date                     
+        
+        if data.empty:
+            return {"ACWI": [], "XIU.TO": []}
+            
+        # Get Close prices
+        closes = data['Close']
+        
+        # Ensure it's not empty and we have the columns
+        # Note: yfinance might return single level if only 1 ticker found, but we asked for 2.
+        
+        result_data = {}
+        
+        # Process each ticker
+        # Handle timezone issues by converting index to string YYYY-MM-DD
+        
+        dates = closes.index.strftime('%Y-%m-%d').tolist()
+        
+        # Check if 'ACWI' and 'XIU.TO' are in columns
+        # Some versions of yfinance return different structures.
+        
+        for ticker in tickers:
+            if ticker in closes.columns:
+                # Handle NaN
+                series = closes[ticker].fillna(method='ffill').fillna(method='bfill')
+                values = series.tolist()
+                
+                # Combine date and value
+                ticker_data = []
+                for d, v in zip(dates, values):
+                    # v could be nan if fetch failed completely for that day?
+                    if pd.notna(v):
+                        ticker_data.append({"date": d, "value": float(v)})
+                
+                result_data[ticker] = ticker_data
+            else:
+                result_data[ticker] = []
+
+        # Save to cache
+        try:
+            cache_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(cache_file, "w") as f:
+                json.dump(result_data, f)
+        except Exception as e:
+            logger.error(f"Failed to write index history cache: {e}")
+            
+        return result_data
+
+    except Exception as e:
+        logger.error(f"Error fetching index history: {e}")
+        return {"ACWI": [], "XIU.TO": []}
+
 
 if __name__ == "__main__":
     import uvicorn
