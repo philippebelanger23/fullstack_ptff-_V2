@@ -11,7 +11,9 @@ interface Props {
 
 const formatDateTick = (dateStr: string) => {
     const date = new Date(dateStr);
-    return isNaN(date.getTime()) ? dateStr : date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    if (isNaN(date.getTime())) return dateStr;
+    // Return only month name in uppercase (e.g., "JAN", "FEB")
+    return date.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
 };
 
 const CustomAreaTooltip = ({ active, payload, label, dates }: any) => {
@@ -58,7 +60,7 @@ export const PortfolioEvolutionChart = memo(({ data, topTickers, dates, colors }
                     <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                            <XAxis dataKey="date" stroke="#94a3b8" tickFormatter={formatDateTick} tick={{ fontSize: 12, fontFamily: 'monospace' }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} dy={10} minTickGap={30} />
+                            <XAxis dataKey="date" stroke="#94a3b8" tickFormatter={formatDateTick} tick={{ fontSize: 12, fontFamily: 'monospace' }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} dy={10} minTickGap={50} />
                             <YAxis stroke="#94a3b8" tickFormatter={(val) => `${val.toFixed(0)}%`} tick={{ fontSize: 12, fontFamily: 'monospace' }} axisLine={false} tickLine={false} />
                             <Tooltip content={(props) => <CustomAreaTooltip {...props} dates={dates} />} />
                             {topTickers.map((ticker, index) => (

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Globe, DollarSign, Map as MapIcon, Zap, TrendingUp } from 'lucide-react';
+import { Globe, DollarSign, Map as MapIcon, Zap, TrendingUp, Layers, PieChart } from 'lucide-react';
 import { fetchIndexExposure, fetchCurrencyPerformance, fetchIndexHistory } from '../services/api';
 import { CountryTreemap } from '../components/CountryTreemap';
 import { ClevelandDotPlot } from '../components/ClevelandDotPlot';
@@ -11,6 +11,7 @@ export const IndexView: React.FC = () => {
     const [currencyPerf, setCurrencyPerf] = useState<Record<string, Record<string, number>>>({});
     const [indexHistory, setIndexHistory] = useState<Record<string, { date: string, value: number }[]>>({});
     const [loading, setLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState<'regional' | 'currency'>('regional');
 
     useEffect(() => {
         const load = async () => {
@@ -100,25 +101,30 @@ export const IndexView: React.FC = () => {
                 </div>
             </div>
 
-            {/* Top Row: Index Performance Graph */}
-            <div className="bg-white p-6 rounded-xl border border-wallstreet-700 shadow-sm flex flex-col h-[400px]">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-bold font-mono text-wallstreet-text flex items-center gap-2">
-                        <TrendingUp size={20} className="text-wallstreet-accent" />
-                        Index Performance (5Y)
-                    </h3>
-                </div>
-                <div className="flex-1 w-full min-h-0">
-                    <IndexPerformanceChart data={indexHistory} />
-                </div>
-            </div>
-
-            {/* Middle Row: Sector & Geography */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <div className="bg-white p-6 rounded-xl border border-wallstreet-700 shadow-sm flex flex-col h-[500px]">
+
+                {/* Top Left: Index Performance Graph */}
+                <div className="bg-white p-6 rounded-xl border border-wallstreet-700 shadow-sm flex flex-col h-[600px]">
+                    <div className="flex justify-between items-center mb-2">
+                        <h3 className="text-lg font-bold font-mono text-wallstreet-text flex items-center gap-2">
+                            <TrendingUp size={20} className="text-wallstreet-accent" />
+                            Index Performance
+                        </h3>
+                        <p className="text-xs text-wallstreet-400 font-mono">All values in CAD</p>
+                    </div>
+                    <div className="flex-1 w-full min-h-0">
+                        <IndexPerformanceChart data={indexHistory} />
+                    </div>
+                </div>
+
+                {/* Top Right: Sector Exposure */}
+                <div className="bg-white p-6 rounded-xl border border-wallstreet-700 shadow-sm flex flex-col h-[600px]">
                     <div className="flex justify-between items-center mb-6">
                         <div>
-                            <h3 className="text-lg font-bold font-mono text-wallstreet-text">Sector Exposure</h3>
+                            <h3 className="text-lg font-bold font-mono text-wallstreet-text flex items-center gap-2">
+                                <PieChart size={20} className="text-wallstreet-accent" />
+                                Sector Exposure
+                            </h3>
                             <p className="text-xs text-wallstreet-500">Real allocation data scraped from iShares/BlackRock (as of Dec 30, 2025).</p>
                         </div>
                     </div>
@@ -127,8 +133,152 @@ export const IndexView: React.FC = () => {
                     </div>
                 </div>
 
-                <div className="bg-white p-6 rounded-xl border border-wallstreet-700 shadow-sm flex flex-col h-[500px]">
-                    <h3 className="text-lg font-bold font-mono text-wallstreet-text mb-2">Geographic Breakdown</h3>
+                {/* Bottom Left: Exposure Analysis (Tabs) */}
+                <div className="bg-white p-6 rounded-xl border border-wallstreet-700 shadow-sm flex flex-col h-[600px]">
+                    <div className="mb-4 flex flex-col sm:flex-row justify-between items-center border-b border-wallstreet-100 pb-2">
+                        <h3 className="text-lg font-bold font-mono text-wallstreet-text flex items-center gap-2">
+                            <Zap size={20} className="text-wallstreet-accent" />
+                            Exposure Analysis
+                        </h3>
+                        <div className="relative flex bg-slate-100 p-1 rounded-lg mt-2 sm:mt-0 w-fit">
+                            <div
+                                className={`absolute left-1 top-1 bottom-1 w-[calc(50%-4px)] bg-wallstreet-accent rounded-md shadow-sm transition-transform duration-300 ease-in-out ${activeTab === 'currency' ? 'translate-x-full' : 'translate-x-0'
+                                    }`}
+                            ></div>
+                            <button
+                                onClick={() => setActiveTab('regional')}
+                                className={`relative z-10 px-4 py-1.5 text-sm font-bold transition-colors duration-300 rounded-md flex items-center justify-center gap-2 min-w-[120px] ${activeTab === 'regional' ? 'text-white' : 'text-slate-500 hover:text-slate-900'
+                                    }`}
+                            >
+                                <MapIcon size={14} /> Regional
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('currency')}
+                                className={`relative z-10 px-4 py-1.5 text-sm font-bold transition-colors duration-300 rounded-md flex items-center justify-center gap-2 min-w-[120px] ${activeTab === 'currency' ? 'text-white' : 'text-slate-500 hover:text-slate-900'
+                                    }`}
+                            >
+                                <DollarSign size={14} /> Currency
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 overflow-auto">
+                        {activeTab === 'regional' ? (
+                            <div className="flex flex-col h-full">
+                                <div className="mb-2">
+                                    <p className="text-xs text-wallstreet-400">Composite geographic exposure.</p>
+                                </div>
+                                <table className="w-full text-sm font-mono">
+                                    <thead className="bg-wallstreet-50 text-wallstreet-500 text-xs uppercase">
+                                        <tr>
+                                            <th className="p-2 text-left">Region</th>
+                                            <th className="p-2 text-right">Exposure</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {(() => {
+                                            const geoData = [...exposure.geography];
+                                            const total = geoData.reduce((sum, item) => sum + item.weight, 0);
+                                            if (total < 99.9) {
+                                                geoData.push({ region: 'Others', weight: 100 - total });
+                                            }
+                                            return geoData.map((g, i) => (
+                                                <tr key={i} className={`border-b border-wallstreet-100 hover:bg-wallstreet-50 ${g.region === 'Others' ? 'text-slate-400' : ''}`}>
+                                                    <td className="py-1.5 px-2 font-medium">{g.region}</td>
+                                                    <td className={`py-1.5 px-2 text-right ${g.region === 'Others' ? 'font-normal' : 'font-bold'}`}>{g.weight.toFixed(1)}%</td>
+                                                </tr>
+                                            ));
+                                        })()}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : (
+                            <div className="flex flex-col h-full">
+                                <div className="mb-2">
+                                    <p className="text-xs text-wallstreet-400">Derived from geographic allocation.</p>
+                                </div>
+                                <table className="w-full text-sm font-mono table-fixed">
+                                    <thead className="bg-wallstreet-50 text-wallstreet-500 text-xs uppercase">
+                                        <tr>
+                                            <th className="p-2 text-left w-[15%]">Curr</th>
+                                            <th className="p-2 text-center w-[25%]">Exp</th>
+                                            <th className="p-2 text-center text-xs text-wallstreet-400 w-[15%]">YTD</th>
+                                            <th className="p-2 text-center text-xs text-wallstreet-400 w-[15%]">3M</th>
+                                            <th className="p-2 text-center text-xs text-wallstreet-400 w-[15%]">6M</th>
+                                            <th className="p-2 text-center text-xs text-wallstreet-400 w-[15%]">1Y</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {(() => {
+                                            const totalCurrency = currencyExposure.reduce((sum, c) => sum + c.weight, 0);
+                                            let finalCurrency = [...currencyExposure];
+
+                                            if (totalCurrency < 99.9) {
+                                                const diff = 100 - totalCurrency;
+                                                const otherIndex = finalCurrency.findIndex(c => c.code === 'Other');
+                                                if (otherIndex >= 0) {
+                                                    finalCurrency[otherIndex].weight += diff;
+                                                } else {
+                                                    finalCurrency.push({ code: 'Other', weight: diff });
+                                                }
+                                            }
+
+                                            const getTicker = (code: string) => {
+                                                if (code === 'USD') return 'USDCAD=X';
+                                                if (code === 'JPY') return 'JPYCAD=X';
+                                                if (code === 'EUR') return 'EURCAD=X';
+                                                if (code === 'CAD') return 'CAD';
+                                                return '';
+                                            };
+
+                                            const formatPerf = (val: number | undefined) => {
+                                                if (val === undefined) return '-';
+                                                const color = val > 0 ? 'text-green-600' : val < 0 ? 'text-red-500' : 'text-slate-400';
+                                                return <span className={color}>{(val * 100).toFixed(1)}%</span>;
+                                            };
+
+                                            return finalCurrency.map((c) => {
+                                                const ticker = getTicker(c.code);
+                                                let perf = currencyPerf[ticker] || {};
+                                                if (ticker === 'CAD') {
+                                                    perf = { YTD: 0, '1Y': 0, '6M': 0, '3M': 0 };
+                                                }
+
+                                                return (
+                                                    <tr key={c.code} className={`border-b border-wallstreet-100 hover:bg-wallstreet-50 ${c.code === 'Other' ? 'text-slate-400' : ''}`}>
+                                                        <td className="py-1.5 px-2 font-medium">{c.code}</td>
+                                                        <td className={`py-1.5 px-2 text-center ${c.code === 'Other' ? 'font-normal' : `font-bold ${c.code === 'USD' ? 'text-blue-700' : c.code === 'CAD' ? 'text-red-700' : 'text-slate-700'}`}`}>
+                                                            {c.weight.toFixed(1)}%
+                                                        </td>
+                                                        {c.code !== 'Other' ? (
+                                                            <>
+                                                                <td className="py-1.5 px-2 text-center">{formatPerf(perf.YTD)}</td>
+                                                                <td className="py-1.5 px-2 text-center">{formatPerf(perf['3M'])}</td>
+                                                                <td className="py-1.5 px-2 text-center">{formatPerf(perf['6M'])}</td>
+                                                                <td className="py-1.5 px-2 text-center">{formatPerf(perf['1Y'])}</td>
+                                                            </>
+                                                        ) : (
+                                                            <td colSpan={4} className="py-1.5 px-2 text-center text-slate-300">-</td>
+                                                        )}
+                                                    </tr>
+                                                )
+                                            });
+                                        })()}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Bottom Right: Geographic Breakdown */}
+                <div className="bg-white p-6 rounded-xl border border-wallstreet-700 shadow-sm flex flex-col h-[600px]">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-lg font-bold font-mono text-wallstreet-text flex items-center gap-2">
+                            <Globe size={20} className="text-wallstreet-accent" />
+                            Geographic Breakdown
+                        </h3>
+                    </div>
                     <div className="flex-1 w-full relative min-h-0">
                         <CountryTreemap data={(() => {
                             const data = exposure.geography.map(g => ({ name: g.region, value: g.weight }));
@@ -140,138 +290,7 @@ export const IndexView: React.FC = () => {
                         })()} />
                     </div>
                 </div>
-            </div>
 
-            {/* Bottom Row: Combined Regional & Currency Breakdown */}
-            <div className="bg-white p-6 rounded-xl border border-wallstreet-700 shadow-sm">
-                <div className="mb-6 flex flex-col sm:flex-row justify-between items-baseline border-b border-wallstreet-100 pb-4">
-                    <h2 className="text-xl font-bold font-mono text-wallstreet-text flex items-center gap-2">
-                        <Zap size={20} className="text-wallstreet-accent" />
-                        Exposure Analysis
-                    </h2>
-                    <span className="text-sm text-wallstreet-500 mt-2 sm:mt-0">Breakdown by Region and Currency</span>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
-                    {/* Regional Allocation Column */}
-                    <div className="flex flex-col">
-                        <div className="mb-4">
-                            <h3 className="text-base font-bold font-mono text-wallstreet-text flex items-center gap-2 text-wallstreet-600">
-                                <MapIcon size={16} /> Regional Allocation
-                            </h3>
-                            <p className="text-xs text-wallstreet-400">Composite geographic exposure.</p>
-                        </div>
-                        <div className="flex-1 overflow-auto">
-                            <table className="w-full text-sm font-mono">
-                                <thead className="bg-wallstreet-50 text-wallstreet-500 text-xs uppercase">
-                                    <tr>
-                                        <th className="p-2 text-left">Region</th>
-                                        <th className="p-2 text-right">Exposure</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {(() => {
-                                        const geoData = [...exposure.geography];
-                                        const total = geoData.reduce((sum, item) => sum + item.weight, 0);
-                                        if (total < 99.9) {
-                                            geoData.push({ region: 'Others', weight: 100 - total });
-                                        }
-                                        return geoData.map((g, i) => (
-                                            <tr key={i} className={`border-b border-wallstreet-100 hover:bg-wallstreet-50 ${g.region === 'Others' ? 'text-slate-400' : ''}`}>
-                                                <td className="p-2 font-medium">{g.region}</td>
-                                                <td className={`p-2 text-right ${g.region === 'Others' ? 'font-normal' : 'font-bold'}`}>{g.weight.toFixed(1)}%</td>
-                                            </tr>
-                                        ));
-                                    })()}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    {/* Currency Exposure Column */}
-                    <div className="flex flex-col">
-                        <div className="mb-4">
-                            <h3 className="text-base font-bold font-mono text-wallstreet-text flex items-center gap-2 text-wallstreet-600">
-                                <DollarSign size={16} /> Currency Exposure
-                            </h3>
-                            <p className="text-xs text-wallstreet-400">Derived from geographic allocation.</p>
-                        </div>
-                        <div className="flex-1">
-                            <table className="w-full text-sm font-mono table-fixed">
-                                <thead className="bg-wallstreet-50 text-wallstreet-500 text-xs uppercase">
-                                    <tr>
-                                        <th className="p-2 text-left w-[15%]">Curr</th>
-                                        <th className="p-2 text-center w-[25%]">Exp</th>
-                                        <th className="p-2 text-center text-xs text-wallstreet-400 w-[15%]">YTD</th>
-                                        <th className="p-2 text-center text-xs text-wallstreet-400 w-[15%]">3M</th>
-                                        <th className="p-2 text-center text-xs text-wallstreet-400 w-[15%]">6M</th>
-                                        <th className="p-2 text-center text-xs text-wallstreet-400 w-[15%]">1Y</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {(() => {
-                                        // Ensure currency adds up to 100%
-                                        const totalCurrency = currencyExposure.reduce((sum, c) => sum + c.weight, 0);
-                                        let finalCurrency = [...currencyExposure];
-
-                                        if (totalCurrency < 99.9) {
-                                            const diff = 100 - totalCurrency;
-                                            // Check if 'Other' already exists
-                                            const otherIndex = finalCurrency.findIndex(c => c.code === 'Other');
-                                            if (otherIndex >= 0) {
-                                                finalCurrency[otherIndex].weight += diff;
-                                            } else {
-                                                finalCurrency.push({ code: 'Other', weight: diff });
-                                            }
-                                        }
-
-                                        const getTicker = (code: string) => {
-                                            if (code === 'USD') return 'USDCAD=X';
-                                            if (code === 'JPY') return 'JPYCAD=X';
-                                            if (code === 'EUR') return 'EURCAD=X';
-                                            if (code === 'CAD') return 'CAD';
-                                            return '';
-                                        };
-
-                                        const formatPerf = (val: number | undefined) => {
-                                            if (val === undefined) return '-';
-                                            const color = val > 0 ? 'text-green-600' : val < 0 ? 'text-red-500' : 'text-slate-400';
-                                            return <span className={color}>{(val * 100).toFixed(1)}%</span>;
-                                        };
-
-                                        return finalCurrency.map((c) => {
-                                            const ticker = getTicker(c.code);
-                                            // Handle Base Currency (CAD)
-                                            let perf = currencyPerf[ticker] || {};
-                                            if (ticker === 'CAD') {
-                                                perf = { YTD: 0, '1Y': 0, '6M': 0, '3M': 0 };
-                                            }
-
-                                            return (
-                                                <tr key={c.code} className={`border-b border-wallstreet-100 hover:bg-wallstreet-50 ${c.code === 'Other' ? 'text-slate-400' : ''}`}>
-                                                    <td className="p-2 font-medium">{c.code}</td>
-                                                    <td className={`p-2 text-center ${c.code === 'Other' ? 'font-normal' : `font-bold ${c.code === 'USD' ? 'text-blue-700' : c.code === 'CAD' ? 'text-red-700' : 'text-slate-700'}`}`}>
-                                                        {c.weight.toFixed(1)}%
-                                                    </td>
-                                                    {c.code !== 'Other' ? (
-                                                        <>
-                                                            <td className="p-2 text-center">{formatPerf(perf.YTD)}</td>
-                                                            <td className="p-2 text-center">{formatPerf(perf['3M'])}</td>
-                                                            <td className="p-2 text-center">{formatPerf(perf['6M'])}</td>
-                                                            <td className="p-2 text-center">{formatPerf(perf['1Y'])}</td>
-                                                        </>
-                                                    ) : (
-                                                        <td colSpan={4} className="p-2 text-center text-slate-300">-</td>
-                                                    )}
-                                                </tr>
-                                            )
-                                        });
-                                    })()}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
     );

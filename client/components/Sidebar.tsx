@@ -16,7 +16,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, hasData 
   `;
 
   return (
-    <div className="w-64 h-screen bg-wallstreet-900 border-r border-wallstreet-700 flex flex-col sticky top-0 shadow-sm">
+    <div className="w-64 h-screen bg-wallstreet-900 border-r border-wallstreet-700 flex flex-col sticky top-0 shadow-sm print-hide">
       <div className="p-6 border-b border-wallstreet-700">
         <h1 className="text-xl font-bold font-mono text-wallstreet-text tracking-tighter">
           <span className="text-wallstreet-accent">PTF</span> DEEP DIVE

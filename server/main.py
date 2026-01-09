@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import List, Optional
 import pandas as pd
 from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import logging
@@ -13,6 +14,7 @@ from data_loader import load_weights_file, load_nav_file
 from market_data import calculate_returns, calculate_benchmark_returns, build_results_dataframe, get_ticker_performance
 from cache_manager import load_cache, save_cache
 from constants import CASH_TICKER, FX_TICKER
+from pdf_generator import generate_pdf
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -21,16 +23,9 @@ logger = logging.getLogger(__name__)
 app = FastAPI()
 
 # Configure CORS
-origins = [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:5173",
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],  # Allow all origins for development (supports network IPs)
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -139,6 +134,73 @@ async def analyze_portfolio(
 
     except Exception as e:
         logger.error(f"Error processing analysis: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+        
+    finally:
+        # Cleanup
+        if weights_path.exists():
+            weights_path.unlink()
+        if nav_path and nav_path.exists():
+            nav_path.unlink()
+        if temp_dir.exists():
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+@app.post("/generate-pdf")
+async def generate_pdf_endpoint(
+    weights_file: UploadFile = File(...),
+    nav_file: Optional[UploadFile] = File(None)
+):
+    """Generate PDF with Top Contributors/Disruptors tables."""
+    temp_dir = Path("temp_uploads")
+    temp_dir.mkdir(exist_ok=True)
+    
+    weights_path = temp_dir / weights_file.filename
+    nav_path = None
+    
+    try:
+        # Save uploaded files
+        with weights_path.open("wb") as buffer:
+            shutil.copyfileobj(weights_file.file, buffer)
+            
+        if nav_file:
+            nav_path = temp_dir / nav_file.filename
+            with nav_path.open("wb") as buffer:
+                shutil.copyfileobj(nav_file.file, buffer)
+        
+        cache = load_cache()
+        
+        logger.info(f"Loading weights file for PDF: {weights_path}")
+        weights_dict, dates = load_weights_file(str(weights_path))
+        
+        nav_dict = {}
+        if nav_path:
+            nav_dict = load_nav_file(str(nav_path))
+            
+        logger.info("Fetching market data for PDF...")
+        returns, prices = calculate_returns(weights_dict, nav_dict, dates, cache)
+        
+        save_cache(cache)
+        
+        logger.info("Building results dataframe for PDF...")
+        df, periods = build_results_dataframe(weights_dict, returns, prices, dates, cache)
+        
+        if df.empty:
+            raise HTTPException(status_code=400, detail="No data to generate PDF")
+        
+        logger.info("Generating PDF...")
+        pdf_buffer = generate_pdf(df, periods, dates)
+        
+        # Return PDF as streaming response
+        return StreamingResponse(
+            pdf_buffer,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": "attachment; filename=top_contributors.pdf"
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error generating PDF: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
         
     finally:
@@ -417,15 +479,32 @@ async def fetch_betas(request: dict):
         return {}
     
     import yfinance as yf
+    import json
     
     unique_tickers = list(set([t.strip() for t in tickers if t and isinstance(t, str)]))
     results = {}
     
-    # Heuristic for obvious funds/ETFs where we want Beta = 1.0 immediately without fetching
+    # --- Server-Side Persistence for Betas ---
+    cache_file = Path("data/betas_cache.json")
+    server_cache = {}
     
+    # Load existing cache
+    if cache_file.exists():
+        try:
+            with open(cache_file, "r") as f:
+                server_cache = json.load(f)
+        except Exception as e:
+            logger.warning(f"Failed to load beta cache file: {e}")
+    
+    # Heuristic for obvious funds/ETFs where we want Beta = 1.0 immediately without fetching
     to_fetch = []
     
     for ticker in unique_tickers:
+        # Check server cache first
+        if ticker in server_cache:
+            results[ticker] = server_cache[ticker]
+            continue
+            
         t_upper = ticker.upper()
         # Heuristics for Funds/ETFs to default to 1.0
         if (t_upper.startswith('TDB') or 
@@ -437,9 +516,11 @@ async def fetch_betas(request: dict):
             'CASH' in t_upper or 
             '$' in t_upper):
             results[ticker] = 1.0
+            server_cache[ticker] = 1.0  # Cache heuristic values too
         else:
             to_fetch.append(ticker)
-            
+    
+    # Only fetch tickers not in cache
     if to_fetch:
         try:
             tickers_obj = yf.Tickers(" ".join(to_fetch))
@@ -450,26 +531,34 @@ async def fetch_betas(request: dict):
                     if not found_ticker:
                         found_ticker = yf.Ticker(ticker)
                         
-                    # Use fast_info if possible, or info
                     # beta is in info
                     info = found_ticker.info
                     
                     quote_type = info.get('quoteType', '').upper()
                     if quote_type in ['ETF', 'MUTUALFUND']:
-                        results[ticker] = 1.0
+                        beta_value = 1.0
                     else:
                         beta = info.get('beta')
-                        if beta is not None:
-                            results[ticker] = beta
-                        else:
-                            results[ticker] = 1.0
+                        beta_value = beta if beta is not None else 1.0
+                    
+                    results[ticker] = beta_value
+                    server_cache[ticker] = beta_value  # Cache the result
                             
                 except Exception as e:
                     logger.warning(f"Failed to fetch beta for {ticker}: {e}")
-                    results[ticker] = 1.0 
+                    results[ticker] = 1.0
+                    server_cache[ticker] = 1.0
                     
         except Exception as e:
             logger.error(f"Error fetching betas: {e}")
+    
+    # Save updated cache
+    try:
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(cache_file, "w") as f:
+            json.dump(server_cache, f)
+    except Exception as e:
+        logger.error(f"Failed to save beta cache: {e}")
             
     return results
 
@@ -477,6 +566,7 @@ async def fetch_betas(request: dict):
 async def get_index_history():
     """
     Fetch historical data for ACWI (global) and XIU.TO (Canada) for the comparison graph.
+    Also fetches USDCAD=X to convert ACWI to CAD, and calculates a synthetic blend (75% ACWI, 25% XIU).
     Caches the result to avoid repeated slow yfinance calls.
     """
     import yfinance as yf
@@ -499,54 +589,85 @@ async def get_index_history():
 
     # Fetch new data
     logger.info("Fetching fresh index history from yfinance...")
-    tickers = ["ACWI", "XIU.TO"]
+    tickers = ["ACWI", "XIU.TO", "USDCAD=X"]
     
     try:
-        # Fetch 5 years of data to be safe, daily interval
+        # Fetch 5 years of data
+        # auto_adjust=True might be better for total return (dividends), but standard close is okay for simple price
         data = yf.download(tickers, period="5y", interval="1d", progress=False)
         
-        # yfinance download with multiple tickers returns a MultiIndex columns dataframe
-        # We need to flatten it.
-        # Structure is typically:
-        #             Close             
-        # Ticker      ACWI   XIU.TO
-        # Date                     
-        
         if data.empty:
-            return {"ACWI": [], "XIU.TO": []}
+            return {"ACWI": [], "XIU.TO": [], "Index": []}
             
         # Get Close prices
-        closes = data['Close']
+        # Handle potential multi-index or single index
+        # If all tickers found, it's multi-index 'Close' -> [ACWI, XIU.TO, USDCAD=X]
+        if 'Close' in data.columns:
+            closes = data['Close']
+        else:
+            # Fallback if structure is different (sometimes yfinance changes)
+            closes = data
         
-        # Ensure it's not empty and we have the columns
-        # Note: yfinance might return single level if only 1 ticker found, but we asked for 2.
+        # Ensure we have all columns
+        expected_cols = ["ACWI", "XIU.TO", "USDCAD=X"]
+        # Filter for existing columns
+        existing_cols = [c for c in expected_cols if c in closes.columns]
         
-        result_data = {}
+        if not existing_cols:
+             return {"ACWI": [], "XIU.TO": [], "Index": []}
+
+        # Fill missing values (holidays etc)
+        closes = closes[existing_cols].ffill().bfill()
         
-        # Process each ticker
-        # Handle timezone issues by converting index to string YYYY-MM-DD
+        result_data = {
+            "ACWI": [],
+            "XIU.TO": [],
+            "Index": []
+        }
         
         dates = closes.index.strftime('%Y-%m-%d').tolist()
         
-        # Check if 'ACWI' and 'XIU.TO' are in columns
-        # Some versions of yfinance return different structures.
+        # Use pandas vectorized operations for calculation
+        # Handle missing columns gracefully if only partial success
+        if "ACWI" in closes.columns and "USDCAD=X" in closes.columns:
+            acwi_cad_series = closes["ACWI"] * closes["USDCAD=X"]
+        else:
+            acwi_cad_series = pd.Series(dtype=float)
+            
+        if "XIU.TO" in closes.columns:
+            xiu_series = closes["XIU.TO"]
+        else:
+            xiu_series = pd.Series(dtype=float)
+            
+        # Calculate Composite Index (Total Return approx)
+        # We use daily returns to build the index starting at 100
+        if not acwi_cad_series.empty and not xiu_series.empty:
+            acwi_ret = acwi_cad_series.pct_change().fillna(0)
+            xiu_ret = xiu_series.pct_change().fillna(0)
+            
+            # Synthetic 75/25
+            composite_ret = (acwi_ret * 0.75) + (xiu_ret * 0.25)
+            composite_index = (1 + composite_ret).cumprod() * 100
+        else:
+            composite_index = pd.Series(dtype=float)
         
-        for ticker in tickers:
-            if ticker in closes.columns:
-                # Handle NaN
-                series = closes[ticker].fillna(method='ffill').fillna(method='bfill')
-                values = series.tolist()
-                
-                # Combine date and value
-                ticker_data = []
-                for d, v in zip(dates, values):
-                    # v could be nan if fetch failed completely for that day?
-                    if pd.notna(v):
-                        ticker_data.append({"date": d, "value": float(v)})
-                
-                result_data[ticker] = ticker_data
-            else:
-                result_data[ticker] = []
+        # Prepare final lists
+        acwi_list = acwi_cad_series.tolist() if not acwi_cad_series.empty else []
+        xiu_list = xiu_series.tolist() if not xiu_series.empty else []
+        comp_list = composite_index.tolist() if not composite_index.empty else []
+        
+        for i, date_str in enumerate(dates):
+             # ACWI (in CAD)
+             if i < len(acwi_list) and pd.notna(acwi_list[i]):
+                 result_data["ACWI"].append({"date": date_str, "value": acwi_list[i]})
+                 
+             # XIU
+             if i < len(xiu_list) and pd.notna(xiu_list[i]):
+                 result_data["XIU.TO"].append({"date": date_str, "value": xiu_list[i]})
+                 
+             # Composite
+             if i < len(comp_list) and pd.notna(comp_list[i]):
+                 result_data["Index"].append({"date": date_str, "value": comp_list[i]})
 
         # Save to cache
         try:
@@ -560,7 +681,7 @@ async def get_index_history():
 
     except Exception as e:
         logger.error(f"Error fetching index history: {e}")
-        return {"ACWI": [], "XIU.TO": []}
+        return {"ACWI": [], "XIU.TO": [], "Index": []}
 
 
 if __name__ == "__main__":

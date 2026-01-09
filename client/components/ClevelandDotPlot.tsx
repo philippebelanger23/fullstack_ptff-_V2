@@ -91,13 +91,13 @@ export const ClevelandDotPlot: React.FC<DotPlotProps> = ({ data }) => {
                 />
 
                 {/* ACWI Dot */}
-                <Scatter name="ACWI (75%)" dataKey="ACWI" fill="#94a3b8" shape="circle" />
+                <Scatter name="ACWI (75%)" dataKey="ACWI" fill="#2563eb" shape="circle" />
 
                 {/* TSX Dot */}
                 <Scatter name="XIU.TO (25%)" dataKey="TSX" fill="#dc2626" shape="circle" />
 
                 {/* Index Triangle */}
-                <Scatter name="75/25 Composite" dataKey="Index" fill="#004dea" shape="triangle" />
+                <Scatter name="75/25 Composite" dataKey="Index" fill="#10b981" shape="triangle" />
 
             </ComposedChart>
         </ResponsiveContainer>

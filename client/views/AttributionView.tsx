@@ -1,11 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { PortfolioItem } from '../types';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList, ReferenceLine, ScatterChart, Scatter, ZAxis, ComposedChart, Line } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList, ReferenceLine, ScatterChart, Scatter, ZAxis, ComposedChart, Line, ReferenceArea } from 'recharts';
 import { KPICard } from '../components/KPICard';
-import { TrendingUp, Target, AlertTriangle, Calendar, Grid, Activity, Percent, Layers, Zap, Scale } from 'lucide-react';
+import { TrendingUp, Target, AlertTriangle, Calendar, Grid, Activity, Percent, Layers, Zap, Scale, Info, Printer, Download, Loader2 } from 'lucide-react';
+import { generatePDF } from '../services/api';
 
 interface AttributionViewProps {
     data: PortfolioItem[];
+    uploadedFiles?: { weightsFile: File | null, navFile: File | null };
 }
 
 const formatPct = (val: number | undefined) => {
@@ -63,7 +65,7 @@ interface TableItem {
     contribution: number;
 }
 
-const AttributionTable = ({ title, items }: { title: string, items: TableItem[] }) => {
+const AttributionTable = ({ title, items, isQuarter = false }: { title: string, items: TableItem[], isQuarter?: boolean }) => {
     const positives = items.filter(i => i.contribution >= 0).sort((a, b) => b.contribution - a.contribution);
     const negatives = items.filter(i => i.contribution < 0).sort((a, b) => a.contribution - b.contribution);
     const topContributors = positives.slice(0, 5);
@@ -98,13 +100,13 @@ const AttributionTable = ({ title, items }: { title: string, items: TableItem[] 
     );
 
     return (
-        <div className="bg-white border border-wallstreet-700 rounded-xl shadow-sm flex flex-col h-full font-mono text-xs overflow-hidden">
+        <div className={`${isQuarter ? 'bg-black' : 'bg-white'} rounded-xl shadow-sm flex flex-col h-full font-mono text-xs overflow-hidden print-table ${isQuarter ? 'border-4 border-black' : 'border-4 border-[#f1f5f9]'}`}>
             {/* Title Row */}
             <div className="bg-black text-white py-4 text-center font-bold uppercase tracking-wider text-sm">
                 {title}
             </div>
 
-            <div className="flex-1 overflow-x-auto">
+            <div className={`flex-1 overflow-x-auto ${isQuarter ? 'bg-white' : ''}`}>
                 <table className="w-full">
                     {/* Top Contributors Section */}
                     <thead>
@@ -238,9 +240,27 @@ const aggregatePeriodData = (data: PortfolioItem[]): TableItem[] => {
     return results;
 };
 
-export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
-    const [viewMode, setViewMode] = useState<'OVERVIEW' | 'MONTHLY' | 'QUARTERLY'>('OVERVIEW');
+export const AttributionView: React.FC<AttributionViewProps> = ({ data, uploadedFiles }) => {
+    const [viewMode, setViewMode] = useState<'OVERVIEW' | 'TABLES'>('OVERVIEW');
     const [timeRange, setTimeRange] = useState<'YTD' | 'Q1' | 'Q2' | 'Q3' | 'Q4'>('YTD');
+    const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+    const [pdfError, setPdfError] = useState<string | null>(null);
+
+    const handleDownloadPDF = async () => {
+        if (!uploadedFiles?.weightsFile) {
+            setPdfError('No weights file available. Please re-run analysis.');
+            return;
+        }
+        setIsGeneratingPDF(true);
+        setPdfError(null);
+        try {
+            await generatePDF(uploadedFiles.weightsFile, uploadedFiles.navFile || undefined);
+        } catch (err: any) {
+            setPdfError(err.message || 'PDF generation failed');
+        } finally {
+            setIsGeneratingPDF(false);
+        }
+    };
 
     const cleanData = useMemo(() => data, [data]);
 
@@ -347,19 +367,28 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
         // Calculate Total Portfolio Contribution (Sum of all ticker total contributions)
         const totalPortfolioContrib = tickerStats.reduce((sum, t) => sum + t.totalContrib, 0);
 
-        // Sort by Weight Descending and take Top 10
-        const top10 = [...tickerStats]
+        // Sort by Weight Descending and take Top 15 for cleaner visualization
+        const top30 = [...tickerStats]
             .sort((a, b) => b.latestWeight - a.latestWeight)
-            .slice(0, 10);
+            .slice(0, 15);
 
-        return top10.map(s => {
-            // Y Axis is now Absolute Contribution %
+        return top30.map(s => {
+            // Efficiency Score: Distance from the expected return line
+            // Expected Return = Weight * (TotalPortfolioReturn / 100)
+            const expectedContrib = (s.latestWeight / 100) * totalPortfolioContrib;
+            const efficiencyScore = s.totalContrib - expectedContrib; // Positive = Improving Efficiency
+
+            // Total Return % (Simple approximation: Contrib / Weight)
+            const impliedReturn = s.latestWeight > 0.01 ? (s.totalContrib / s.latestWeight) * 100 : 0;
+
             return {
                 ticker: s.ticker,
                 x: s.latestWeight,
                 y: s.totalContrib, // Absolute Contribution %
                 absoluteContrib: s.totalContrib,
-                z: 1
+                efficiencyScore: efficiencyScore,
+                impliedReturn: impliedReturn,
+                z: 1 // Placeholder for Sizing if we had Conviction data
             };
         });
     }, [tickerStats]);
@@ -577,12 +606,12 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
 
     return (
         <div className="max-w-[100vw] mx-auto p-4 md:p-6 space-y-6 overflow-x-hidden min-h-screen">
-            <header className="border-b border-wallstreet-700 pb-4 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+            <header className="border-b border-wallstreet-700 pb-4 flex flex-col md:flex-row justify-between items-start md:items-end gap-4 print-hide">
                 <div>
                     <h2 className="text-3xl font-bold font-mono text-wallstreet-text">Performance Attribution</h2>
                     <p className="text-wallstreet-500 mt-1 text-sm">Allocation vs. Selection Effect Analysis (Excl. Cash)</p>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4 print-hide">
                     {/* Time Range Selector - Only visible in Overview */}
                     {viewMode === 'OVERVIEW' && (
                         <div className="flex items-center bg-white border border-wallstreet-700 rounded-lg p-1 shadow-sm">
@@ -592,10 +621,33 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
                         </div>
                     )}
 
+                    {/* Download PDF Button - Only visible in Tables view */}
+                    {viewMode === 'TABLES' && uploadedFiles?.weightsFile && (
+                        <button
+                            onClick={handleDownloadPDF}
+                            disabled={isGeneratingPDF}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold font-mono transition-all shadow-sm ${isGeneratingPDF
+                                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                : 'bg-green-600 text-white hover:bg-green-700'
+                                }`}
+                        >
+                            {isGeneratingPDF ? (
+                                <>
+                                    <Loader2 size={14} className="animate-spin" />
+                                    Generating...
+                                </>
+                            ) : (
+                                <>
+                                    <Download size={14} />
+                                    Download PDF
+                                </>
+                            )}
+                        </button>
+                    )}
+
                     <div className="flex p-1 bg-wallstreet-200 rounded-lg">
                         <button onClick={() => setViewMode('OVERVIEW')} className={`px-4 py-2 rounded-md text-xs font-bold font-mono transition-all flex items-center gap-2 ${viewMode === 'OVERVIEW' ? 'bg-white text-wallstreet-accent shadow-sm' : 'text-wallstreet-500 hover:text-wallstreet-text'}`}><Grid size={14} /> Overview</button>
-                        <button onClick={() => setViewMode('MONTHLY')} className={`px-4 py-2 rounded-md text-xs font-bold font-mono transition-all flex items-center gap-2 ${viewMode === 'MONTHLY' ? 'bg-white text-wallstreet-accent shadow-sm' : 'text-wallstreet-500 hover:text-wallstreet-text'}`}><Calendar size={14} /> Monthly</button>
-                        <button onClick={() => setViewMode('QUARTERLY')} className={`px-4 py-2 rounded-md text-xs font-bold font-mono transition-all flex items-center gap-2 ${viewMode === 'QUARTERLY' ? 'bg-white text-wallstreet-accent shadow-sm' : 'text-wallstreet-500 hover:text-wallstreet-text'}`}><Layers size={14} /> Quarterly</button>
+                        <button onClick={() => setViewMode('TABLES')} className={`px-4 py-2 rounded-md text-xs font-bold font-mono transition-all flex items-center gap-2 ${viewMode === 'TABLES' ? 'bg-white text-wallstreet-accent shadow-sm' : 'text-wallstreet-500 hover:text-wallstreet-text'}`}><Layers size={14} /> Tables</button>
                     </div>
                 </div>
             </header>
@@ -646,8 +698,16 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
 
                         <div className="lg:col-span-4 flex flex-col md:gap-4 gap-4 h-full">
                             <div className="bg-white p-4 rounded-xl border border-wallstreet-700 shadow-sm flex-1 flex flex-col min-h-[220px]">
-                                <h3 className="font-mono font-bold text-wallstreet-text uppercase tracking-wider text-xs flex items-center gap-2 mb-2"><Scale size={14} className="text-wallstreet-500" /> Capital Efficiency (Top 10 Holdings)</h3>
-                                <div className="flex-1 w-full">
+                                <div className="flex justify-between items-start mb-2">
+                                    <h3 className="font-mono font-bold text-wallstreet-text uppercase tracking-wider text-xs flex items-center gap-2">
+                                        <Scale size={14} className="text-wallstreet-500" /> Capital Efficiency Matrix (Top 15)
+                                    </h3>
+                                    <div className="flex gap-2 text-[10px] font-mono">
+                                        <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500"></div> Accretive</span>
+                                        <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-rose-500"></div> Dilutive</span>
+                                    </div>
+                                </div>
+                                <div className="flex-1 w-full rounded-lg relative" style={{ background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(255, 255, 255, 0) 40%, rgba(255, 255, 255, 0) 60%, rgba(244, 63, 94, 0.08) 100%)' }}>
                                     <ResponsiveContainer width="100%" height="100%">
                                         <ScatterChart margin={{ top: 10, right: 10, bottom: 10, left: 0 }}>
                                             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -656,21 +716,41 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
                                             <Tooltip cursor={{ strokeDasharray: '3 3' }} content={({ active, payload }) => {
                                                 if (active && payload && payload.length) {
                                                     const d = payload[0].payload;
-                                                    return (
-                                                        <div className="bg-white text-black text-xs p-2 rounded shadow-xl font-mono border border-wallstreet-200 z-50 min-w-[140px]">
-                                                            <div className="font-bold border-b border-wallstreet-200 pb-1 mb-2">{d.ticker}</div>
-                                                            <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
-                                                                <span className="text-slate-500 font-medium text-left">Contrib:</span>
-                                                                <span className="text-right font-bold text-slate-700">
-                                                                    {d.absoluteContrib > 0 ? '+' : ''}{d.absoluteContrib.toFixed(2)}%
-                                                                </span>
+                                                    const effScore = d.efficiencyScore;
+                                                    let action = "Hold";
+                                                    let actionColor = "text-slate-500";
 
-                                                                <span className="text-slate-500 font-medium text-left">Weight:</span>
+                                                    // Action Logic
+                                                    if (effScore > 0.05) {
+                                                        action = d.x < 3 ? "Add / Scale Up" : "Winner (Keep Riding)";
+                                                        actionColor = "text-emerald-600";
+                                                    } else if (effScore < -0.05) {
+                                                        action = d.x > 3 ? "Review / Trim" : "Watch (Speculative)";
+                                                        actionColor = "text-rose-600";
+                                                    }
+
+                                                    return (
+                                                        <div className="bg-white text-black text-xs p-3 rounded-lg shadow-xl font-mono border border-wallstreet-200 z-50 min-w-[180px]">
+                                                            <div className="flex justify-between items-center border-b border-wallstreet-200 pb-2 mb-2">
+                                                                <span className="font-bold text-sm">{d.ticker}</span>
+                                                                <span className={`px-1.5 py-0.5 rounded text-[10px] uppercase font-bold ${effScore > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                                                                    {effScore > 0 ? 'Efficient' : 'Inefficient'}
+                                                                </span>
+                                                            </div>
+                                                            <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
+                                                                <span className="text-slate-500 text-left">Weight:</span>
                                                                 <span className="text-right font-bold text-slate-700">{d.x.toFixed(2)}%</span>
 
-                                                                <span className="text-slate-500 font-medium text-left">Contrib %:</span>
-                                                                <span className={`text-right font-bold ${d.y < 0 ? 'text-red-700' : 'text-green-700'}`}>
-                                                                    {d.y.toFixed(2)}%
+                                                                <span className="text-slate-500 text-left">Contrib:</span>
+                                                                <span className={`text-right font-bold ${d.y > 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                                                                    {d.y > 0 ? '+' : ''}{d.y.toFixed(2)}%
+                                                                </span>
+
+                                                                <div className="col-span-2 border-t border-slate-100 my-1"></div>
+
+                                                                <span className="text-slate-500 text-left flex items-center gap-1"><Info size={10} /> Action:</span>
+                                                                <span className={`text-right font-bold ${actionColor}`}>
+                                                                    {action}
                                                                 </span>
                                                             </div>
                                                         </div>
@@ -682,14 +762,60 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
                                             <ReferenceLine segment={diagonalEndpoint} stroke="#94a3b8" strokeDasharray="3 3" />
                                             <Scatter name="Tickers" data={capitalEfficiencyData} fill="#004dea">
                                                 {capitalEfficiencyData.map((entry, index) => {
-                                                    // Visual Logic Logic:
-                                                    // Efficient if Contribution > Expected Contribution (Weight * Portfolio Return)
-                                                    // Expected Y = x * (activeReturn / 100)
-                                                    const expectedContrib = (entry.x / 100) * activeReturn;
-                                                    const isEfficient = entry.y > expectedContrib;
-                                                    return <Cell key={`cell-${index}`} fill={isEfficient ? '#16a34a' : '#dc2626'} />;
+                                                    // Gradient coloring based on Efficiency Score
+                                                    // Map score (-0.5 to +0.5 typically) to color saturation
+                                                    const score = entry.efficiencyScore;
+                                                    let fill = '#64748b'; // Neutral
+
+                                                    if (score > 0) {
+                                                        // Green Gradient
+                                                        if (score > 0.2) fill = '#15803d'; // Deep Green
+                                                        else if (score > 0.05) fill = '#22c55e'; // Bright Green
+                                                        else fill = '#86efac'; // Light Green
+                                                    } else {
+                                                        // Red Gradient
+                                                        if (score < -0.2) fill = '#b91c1c'; // Deep Red
+                                                        else if (score < -0.05) fill = '#ef4444'; // Bright Red
+                                                        else fill = '#fca5a5'; // Light Red
+                                                    }
+
+                                                    return <Cell key={`cell-${index}`} fill={fill} stroke="#ffffff" strokeWidth={2} />;
                                                 })}
-                                                <LabelList dataKey="ticker" position="top" style={{ fontSize: '10px', fontWeight: 'bold', fontFamily: 'monospace', fill: '#1e293b' }} offset={5} />
+                                                {/* Minimal Labeling: Only label the 1-2 most extreme & isolated points */}
+                                                <LabelList
+                                                    dataKey="ticker"
+                                                    position="top"
+                                                    content={(props: any) => {
+                                                        const { x, y, value, index } = props;
+                                                        const item = capitalEfficiencyData[index];
+
+                                                        // Find the max and min Y values to only label extremes
+                                                        const maxY = Math.max(...capitalEfficiencyData.map(d => d.y));
+                                                        const minY = Math.min(...capitalEfficiencyData.map(d => d.y));
+
+                                                        // Only label THE top performer and THE worst performer
+                                                        const isTopPerformer = item.y === maxY && maxY > 1.0;
+                                                        const isWorstPerformer = item.y === minY && minY < -0.3;
+
+                                                        if (isTopPerformer) {
+                                                            return (
+                                                                <text x={x} y={y} dy={-10} fill="#15803d" fontSize={10} fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+                                                                    {value}
+                                                                </text>
+                                                            );
+                                                        }
+
+                                                        if (isWorstPerformer) {
+                                                            return (
+                                                                <text x={x} y={y} dy={18} fill="#b91c1c" fontSize={10} fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+                                                                    {value}
+                                                                </text>
+                                                            );
+                                                        }
+
+                                                        return null;
+                                                    }}
+                                                />
                                             </Scatter>
                                         </ScatterChart>
                                     </ResponsiveContainer>
@@ -827,45 +953,118 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data }) => {
             )
             }
 
-            {
-                viewMode === 'MONTHLY' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-2">
-                        {allMonths.map((date) => {
-                            const monthlyData = data.filter(d => {
-                                const dDate = new Date(d.date);
-                                return dDate.getFullYear() === date.getFullYear() && dDate.getMonth() === date.getMonth() && !d.ticker.toUpperCase().includes('CASH');
-                            });
-                            if (monthlyData.length === 0) return null;
+            {/* TABLES VIEW - Combined M M M Q layout */}
+            {viewMode === 'TABLES' && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 print-area">
+                    {/* Row 1: Jan, Feb, Mar, Q1 */}
+                    {allMonths.length >= 3 && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-end">
+                            {[0, 1, 2].map(monthIdx => {
+                                const date = allMonths[monthIdx];
+                                if (!date) return <div key={monthIdx} className="hidden" />;
+                                const monthlyData = data.filter(d => {
+                                    const dDate = new Date(d.date);
+                                    return dDate.getFullYear() === date.getFullYear() && dDate.getMonth() === date.getMonth() && !d.ticker.toUpperCase().includes('CASH');
+                                });
+                                if (monthlyData.length === 0) return <div key={monthIdx} className="hidden" />;
+                                const items = aggregatePeriodData(monthlyData);
+                                return <AttributionTable key={date.toISOString()} title={date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} items={items} />;
+                            })}
+                            {(() => {
+                                const q1Data = cleanData.filter(d => {
+                                    const m = new Date(d.date).getMonth();
+                                    const y = new Date(d.date).getFullYear();
+                                    return [0, 1, 2].includes(m) && y === primaryYear;
+                                });
+                                const uniqueMonths = new Set(q1Data.map(d => new Date(d.date).getMonth()));
+                                if (q1Data.length === 0 || uniqueMonths.size < 3) return null;
+                                return <AttributionTable key="Q1" title={`Q1 ${primaryYear}`} items={aggregatePeriodData(q1Data)} isQuarter={true} />;
+                            })()}
+                        </div>
+                    )}
 
-                            // Use aggregation helper
-                            const items = aggregatePeriodData(monthlyData);
-                            return <AttributionTable key={date.toISOString()} title={date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} items={items} />;
-                        })}
-                    </div>
-                )
-            }
+                    {/* Row 2: Apr, May, Jun, Q2 */}
+                    {allMonths.length >= 6 && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-end">
+                            {[3, 4, 5].map(monthIdx => {
+                                const date = allMonths[monthIdx];
+                                if (!date) return <div key={monthIdx} className="hidden" />;
+                                const monthlyData = data.filter(d => {
+                                    const dDate = new Date(d.date);
+                                    return dDate.getFullYear() === date.getFullYear() && dDate.getMonth() === date.getMonth() && !d.ticker.toUpperCase().includes('CASH');
+                                });
+                                if (monthlyData.length === 0) return <div key={monthIdx} className="hidden" />;
+                                const items = aggregatePeriodData(monthlyData);
+                                return <AttributionTable key={date.toISOString()} title={date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} items={items} />;
+                            })}
+                            {(() => {
+                                const q2Data = cleanData.filter(d => {
+                                    const m = new Date(d.date).getMonth();
+                                    const y = new Date(d.date).getFullYear();
+                                    return [3, 4, 5].includes(m) && y === primaryYear;
+                                });
+                                const uniqueMonths = new Set(q2Data.map(d => new Date(d.date).getMonth()));
+                                if (q2Data.length === 0 || uniqueMonths.size < 3) return null;
+                                return <AttributionTable key="Q2" title={`Q2 ${primaryYear}`} items={aggregatePeriodData(q2Data)} isQuarter={true} />;
+                            })()}
+                        </div>
+                    )}
 
-            {
-                viewMode === 'QUARTERLY' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-bottom-2">
-                        {[{ name: 'Q1', months: [0, 1, 2] }, { name: 'Q2', months: [3, 4, 5] }, { name: 'Q3', months: [6, 7, 8] }, { name: 'Q4', months: [9, 10, 11] }].map(q => {
-                            const qData = cleanData.filter(d => {
-                                const m = new Date(d.date).getMonth();
-                                const y = new Date(d.date).getFullYear();
-                                return q.months.includes(m) && y === primaryYear;
-                            });
+                    {/* Row 3: Jul, Aug, Sep, Q3 */}
+                    {allMonths.length >= 9 && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-end">
+                            {[6, 7, 8].map(monthIdx => {
+                                const date = allMonths[monthIdx];
+                                if (!date) return <div key={monthIdx} className="hidden" />;
+                                const monthlyData = data.filter(d => {
+                                    const dDate = new Date(d.date);
+                                    return dDate.getFullYear() === date.getFullYear() && dDate.getMonth() === date.getMonth() && !d.ticker.toUpperCase().includes('CASH');
+                                });
+                                if (monthlyData.length === 0) return <div key={monthIdx} className="hidden" />;
+                                const items = aggregatePeriodData(monthlyData);
+                                return <AttributionTable key={date.toISOString()} title={date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} items={items} />;
+                            })}
+                            {(() => {
+                                const q3Data = cleanData.filter(d => {
+                                    const m = new Date(d.date).getMonth();
+                                    const y = new Date(d.date).getFullYear();
+                                    return [6, 7, 8].includes(m) && y === primaryYear;
+                                });
+                                const uniqueMonths = new Set(q3Data.map(d => new Date(d.date).getMonth()));
+                                if (q3Data.length === 0 || uniqueMonths.size < 3) return null;
+                                return <AttributionTable key="Q3" title={`Q3 ${primaryYear}`} items={aggregatePeriodData(q3Data)} isQuarter={true} />;
+                            })()}
+                        </div>
+                    )}
 
-                            // Check for completed quarter (needs 3 unique months of data)
-                            const uniqueMonths = new Set(qData.map(d => new Date(d.date).getMonth()));
-                            if (qData.length === 0 || uniqueMonths.size < 3) return null;
-
-                            // Use aggregation helper
-                            const aggregated = aggregatePeriodData(qData);
-                            return <AttributionTable key={q.name} title={`${q.name} ${primaryYear}`} items={aggregated} />
-                        })}
-                    </div>
-                )
-            }
+                    {/* Row 4: Oct, Nov, Dec, Q4 */}
+                    {allMonths.length >= 12 && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-end">
+                            {[9, 10, 11].map(monthIdx => {
+                                const date = allMonths[monthIdx];
+                                if (!date) return <div key={monthIdx} className="hidden" />;
+                                const monthlyData = data.filter(d => {
+                                    const dDate = new Date(d.date);
+                                    return dDate.getFullYear() === date.getFullYear() && dDate.getMonth() === date.getMonth() && !d.ticker.toUpperCase().includes('CASH');
+                                });
+                                if (monthlyData.length === 0) return <div key={monthIdx} className="hidden" />;
+                                const items = aggregatePeriodData(monthlyData);
+                                return <AttributionTable key={date.toISOString()} title={date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} items={items} />;
+                            })}
+                            {(() => {
+                                const q4Data = cleanData.filter(d => {
+                                    const m = new Date(d.date).getMonth();
+                                    const y = new Date(d.date).getFullYear();
+                                    return [9, 10, 11].includes(m) && y === primaryYear;
+                                });
+                                const uniqueMonths = new Set(q4Data.map(d => new Date(d.date).getMonth()));
+                                if (q4Data.length === 0 || uniqueMonths.size < 3) return null;
+                                return <AttributionTable key="Q4" title={`Q4 ${primaryYear}`} items={aggregatePeriodData(q4Data)} isQuarter={true} />;
+                            })()}
+                        </div>
+                    )}
+                </div>
+            )}
         </div >
     );
 };

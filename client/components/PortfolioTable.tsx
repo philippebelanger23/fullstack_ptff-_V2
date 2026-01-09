@@ -96,7 +96,7 @@ export const PortfolioTable: React.FC<PortfolioTableProps> = ({ currentHoldings,
                     )}
                   </td>
                   <td className="px-6 py-4 text-center font-mono text-wallstreet-text">
-                    <span className={`font-bold ${beta > 1.2 ? 'text-red-600' : 'text-slate-600'}`}>{beta.toFixed(2)}</span>
+                    <span className={`font-bold ${beta > 1 ? 'text-red-600' : beta < 1 ? 'text-green-600' : 'text-slate-600'}`}>{beta.toFixed(2)}</span>
                   </td>
                   <td className="px-6 py-4 text-center font-bold text-wallstreet-text">
                     {sector}

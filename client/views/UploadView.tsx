@@ -5,7 +5,7 @@ import { PortfolioItem } from '../types';
 import { analyzePortfolio } from '../services/api';
 
 interface UploadViewProps {
-  onDataLoaded: (data: PortfolioItem[], fileInfo?: { name: string, count: number }) => void;
+  onDataLoaded: (data: PortfolioItem[], fileInfo?: { name: string, count: number }, files?: { weightsFile: File | null, navFile: File | null }) => void;
   onProceed: () => void;
   currentData: PortfolioItem[];
   fileHistory?: { name: string, count: number }[];
@@ -145,7 +145,7 @@ export const UploadView: React.FC<UploadViewProps> = ({ onDataLoaded, onProceed,
       let finalData = normalizedResults;
       if (currentData.length > 0) finalData = mergePortfolios(currentData, normalizedResults);
 
-      onDataLoaded(finalData, { name: "Python Analysis Result", count: results.length });
+      onDataLoaded(finalData, { name: "Python Analysis Result", count: results.length }, { weightsFile, navFile });
 
       // Clear files after success
       setWeightsFile(null);

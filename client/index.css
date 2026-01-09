@@ -49,3 +49,128 @@
     color: var(--text-main);
   }
 }
+
+/* === PRINT STYLES === */
+@media print {
+
+  /* Hide non-essential UI elements */
+  .no-print,
+  .sidebar,
+  nav,
+  header,
+  .print-hide {
+    display: none !important;
+  }
+
+  /* Reset page fundamentals */
+  html,
+  body {
+    background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Page setup - landscape for 4-column layout */
+  @page {
+    size: landscape;
+    margin: 0.25in;
+  }
+
+  /* Make print area fill page */
+  .print-area {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Print row - 4 columns (M1, M2, M3, Q) */
+  .print-row {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 6px !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    margin-bottom: 6px !important;
+  }
+
+  /* Page break after every 2 rows (8 tables) */
+  .print-row:nth-child(2n) {
+    page-break-after: always;
+  }
+
+  /* Compact Print Table - matches Excel styling */
+  .print-table-compact {
+    border: 1px solid #000 !important;
+    font-size: 8px !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .print-table-compact table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  .print-table-compact th,
+  .print-table-compact td {
+    padding: 2px 4px !important;
+    font-size: 8px !important;
+    border-bottom: 1px solid #ddd !important;
+  }
+
+  /* Legacy print-table support */
+  .print-table {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Preserve colors */
+  .text-green-700,
+  .text-green-600,
+  .text-green-800 {
+    color: #15803d !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .text-red-700,
+  .text-red-600,
+  .text-red-800 {
+    color: #b91c1c !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .bg-black,
+  .bg-gray-800 {
+    background-color: #000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .bg-green-100 {
+    background-color: #dcfce7 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .bg-red-100 {
+    background-color: #fee2e2 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .bg-gray-100,
+  .bg-gray-200 {
+    background-color: #e5e5e5 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .text-white {
+    color: #fff !important;
+  }
+}
