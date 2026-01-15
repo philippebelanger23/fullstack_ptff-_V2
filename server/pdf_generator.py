@@ -34,30 +34,32 @@ def create_contributors_table(month_name: str, month_df: pd.DataFrame) -> Table:
         return None
     
     # Get top 5 contributors and disruptors
-    top_contributors = month_df.nlargest(5, 'Contrib')
-    top_disruptors = month_df.nsmallest(5, 'Contrib')
+    # Get top 5 contributors and disruptors
+    top_contributors = month_df.nlargest(5, 'Contrib').fillna(0)
+    top_disruptors = month_df.nsmallest(5, 'Contrib').fillna(0)
     
     # Calculate "Other Holdings"
     excluded_tickers = set(top_contributors['Ticker'].tolist() + top_disruptors['Ticker'].tolist())
-    other_holdings = month_df[~month_df['Ticker'].isin(excluded_tickers)]
+    other_holdings = month_df[~month_df['Ticker'].isin(excluded_tickers)].fillna(0)
     
     other_weight = other_holdings['Weight'].sum() if not other_holdings.empty else 0
     other_contrib = other_holdings['Contrib'].sum() if not other_holdings.empty else 0
     other_return = (other_holdings['Return'] * other_holdings['Weight']).sum() / other_weight if other_weight > 0 else 0
     
     # Totals
-    total_weight = month_df['Weight'].sum()
-    total_contrib = month_df['Contrib'].sum()
+    month_df_safe = month_df.fillna(0)
+    total_weight = month_df_safe['Weight'].sum()
+    total_contrib = month_df_safe['Contrib'].sum()
     
     # Build table data
     data = []
     
     # Title row (will be merged)
-    data.append([month_name, '', '', ''])
+    data.append([month_name.upper(), '', '', ''])
     
     # Top Contributors section
-    data.append(['Top Contributors', '', '', ''])
-    data.append(['Ticker', 'Weight', 'Perf.', 'Contrib.'])
+    data.append(['TOP CONTRIBUTORS', '', '', ''])
+    data.append(['TICKER', 'WEIGHT', 'PERFORMANCE', 'CONTRIB. (BPS)'])
     
     for _, row in top_contributors.iterrows():
         contrib_bps = int(row['Contrib'] * 10000)
@@ -73,8 +75,8 @@ def create_contributors_table(month_name: str, month_df: pd.DataFrame) -> Table:
     data.append(['Σ', f"{top_contributors['Weight'].sum()*100:.2f}%", '', str(contrib_sum_bps)])
     
     # Top Disruptors section
-    data.append(['Top Disruptors', '', '', ''])
-    data.append(['Ticker', 'Weight', 'Perf.', 'Contrib.'])
+    data.append(['TOP DISRUPTORS', '', '', ''])
+    data.append(['TICKER', 'WEIGHT', 'PERFORMANCE', 'CONTRIB. (BPS)'])
     
     for _, row in top_disruptors.iterrows():
         contrib_bps = int(row['Contrib'] * 10000)
@@ -105,69 +107,169 @@ def create_contributors_table(month_name: str, month_df: pd.DataFrame) -> Table:
     table = Table(data, colWidths=col_widths)
     
     # Style the table
+    # Style the table
+    # Colors from Tailwind/App
+    APP_GREEN = colors.HexColor('#15803d') # text-green-700
+    APP_RED = colors.HexColor('#b91c1c')   # text-red-700
+    APP_GREY_BG = colors.HexColor('#d1d5db') # bg-gray-300 / bg-[#d1d5db]
+    APP_BORDER = colors.HexColor('#f1f5f9') # border-wallstreet-100 / light grey
+    
     style = TableStyle([
-        # Title row - black background, white text
+        # --- Month Header ---
         ('SPAN', (0, 0), (3, 0)),
-        ('BACKGROUND', (0, 0), (3, 0), BLACK_BG),
+        ('BACKGROUND', (0, 0), (3, 0), colors.black),
         ('TEXTCOLOR', (0, 0), (3, 0), colors.white),
         ('FONTNAME', (0, 0), (3, 0), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (3, 0), 9),
         ('ALIGN', (0, 0), (3, 0), 'CENTER'),
+        ('BOTTOMPADDING', (0, 0), (3, 0), 4),
+        ('TOPPADDING', (0, 0), (3, 0), 4),
         
-        # Top Contributors header
+        # --- Top Contributors Header ---
         ('SPAN', (0, 1), (3, 1)),
-        ('BACKGROUND', (0, 1), (3, 1), LIGHT_GREEN_BG),
+        ('BACKGROUND', (0, 1), (3, 1), colors.white),
+        ('TEXTCOLOR', (0, 1), (3, 1), colors.black),
         ('FONTNAME', (0, 1), (3, 1), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 1), (3, 1), 7),
         ('ALIGN', (0, 1), (3, 1), 'CENTER'),
+        ('BOTTOMPADDING', (0, 1), (3, 1), 2),
+        ('TOPPADDING', (0, 1), (3, 1), 2),
         
-        # Column headers (row 2)
-        ('BACKGROUND', (0, 2), (3, 2), BLACK_BG),
+        # --- Column Headers (Contributors) ---
+        ('BACKGROUND', (0, 2), (3, 2), colors.black),
         ('TEXTCOLOR', (0, 2), (3, 2), colors.white),
         ('FONTNAME', (0, 2), (3, 2), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 2), (3, 2), 6),
         ('ALIGN', (0, 2), (3, 2), 'CENTER'),
+        ('BOTTOMPADDING', (0, 2), (3, 2), 2),
+        ('TOPPADDING', (0, 2), (3, 2), 2),
         
-        # Top Disruptors header (row 9)
+        # --- Top Disruptors Header ---
         ('SPAN', (0, 9), (3, 9)),
-        ('BACKGROUND', (0, 9), (3, 9), LIGHT_RED_BG),
+        ('BACKGROUND', (0, 9), (3, 9), colors.white),
+        ('TEXTCOLOR', (0, 9), (3, 9), colors.black),
         ('FONTNAME', (0, 9), (3, 9), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 9), (3, 9), 7),
         ('ALIGN', (0, 9), (3, 9), 'CENTER'),
+        ('BOTTOMPADDING', (0, 9), (3, 9), 2),
+        ('TOPPADDING', (0, 9), (3, 9), 2),
         
-        # Column headers for disruptors (row 10)
-        ('BACKGROUND', (0, 10), (3, 10), BLACK_BG),
+        # --- Column Headers (Disruptors) ---
+        ('BACKGROUND', (0, 10), (3, 10), colors.black),
         ('TEXTCOLOR', (0, 10), (3, 10), colors.white),
         ('FONTNAME', (0, 10), (3, 10), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 10), (3, 10), 6),
         ('ALIGN', (0, 10), (3, 10), 'CENTER'),
+        ('BOTTOMPADDING', (0, 10), (3, 10), 2),
+        ('TOPPADDING', (0, 10), (3, 10), 2),
         
-        # Total Portfolio row - grey background
-        ('BACKGROUND', (0, -1), (3, -1), GREY_BG),
+        # --- Total Portfolio ---
+        ('BACKGROUND', (0, -1), (3, -1), APP_GREY_BG),
         ('FONTNAME', (0, -1), (3, -1), 'Helvetica-Bold'),
+        ('TEXTCOLOR', (0, -1), (3, -1), colors.black),
         
-        # General styling
+        # --- General Data Styling ---
         ('FONTSIZE', (0, 3), (3, -1), 7),
-        ('ALIGN', (1, 3), (3, -1), 'CENTER'),
-        ('ALIGN', (0, 3), (0, -1), 'LEFT'),
+        ('ALIGN', (1, 3), (3, -1), 'CENTER'), # Weight centered
+        ('ALIGN', (2, 3), (3, -1), 'CENTER'), # Perf centered
+        ('ALIGN', (3, 3), (3, -1), 'RIGHT'),  # Contrib right aligned (like app)
+        ('ALIGN', (0, 3), (0, -1), 'LEFT'),   # Ticker left aligned
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('TOPPADDING', (0, 0), (-1, -1), 2),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+        ('LEFTPADDING', (0, 0), (-1, -1), 2),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+        ('TOPPADDING', (0, 3), (-1, -1), 2),
+        ('BOTTOMPADDING', (0, 3), (-1, -1), 2),
         
-        # Box around table
-        ('BOX', (0, 0), (-1, -1), 1, colors.black),
-        ('LINEBELOW', (0, 2), (-1, 2), 0.5, colors.black),
-        ('LINEBELOW', (0, 10), (-1, 10), 0.5, colors.black),
+        # --- Borders ---
+        # Outer border
+        ('BOX', (0, 0), (-1, -1), 0.5, colors.black),
+        
+        # Inner horizontal lines
+        # ('GRID', (0, 0), (-1, -1), 0.5, APP_BORDER), # Too busy, match app's "border-b"
+        
+        # Row lines for data
+        ('LineBelow', (0, 3), (-1, 7), 0.25, APP_BORDER),   # Contributors rows
+        ('LineBelow', (0, 11), (-1, 15), 0.25, APP_BORDER), # Disruptors rows
+        
+        # Border under headers
+        ('LineBelow', (0, 2), (-1, 2), 0.5, colors.black),  # Under Contrib Header
+        ('LineBelow', (0, 10), (-1, 10), 0.5, colors.black), # Under Disrupt Header
+        
     ])
     
-    # Apply green color to contributor values (rows 3-7, column 3)
+    # Apply green color to contributor values (rows 3-7)
+    # Perf (Col 2) and Contrib (Col 3)
     for i in range(3, 8):
-        style.add('TEXTCOLOR', (3, i), (3, i), GREEN_TEXT)
-    
-    # Apply red color to disruptor values (rows 11-15, column 3)
+        # We need to check if value is negative (red) or positive (green)
+        # But here we are applying static styles based on row index.
+        # Since we pre-formatted the strings (e.g. "(34)"), strict coloring in ReportLab requires
+        # knowing the value again or parsing the string.
+        # Alternatively, use CellStyle (Flowables) but that's complex.
+        # Simple hack: Top Contributors are usually positive.
+        # BUT wait, the code previously applied GREEN_TEXT to all contrib values in this section.
+        # Let's keep that logic but refine the color.
+        style.add('TEXTCOLOR', (3, i), (3, i), APP_GREEN) # Contrib column
+        
+        # Performance column color depends on value, hard to do with static TableStyle if mixed.
+        # However, Top Contributors usually have positive contrib, but return could be mixed?
+        # Actually, in the code loop we see:
+        # data.append([ticker, weight, perf, contrib])
+        # We can't easily conditionally style CELL by CELL in TableStyle after creation without logic.
+        # The previous code did: style.add('TEXTCOLOR', (3, i), (3, i), GREEN_TEXT)
+        # It assumed top contributors -> green contrib.
+        
+    # Apply red color to disruptor values (rows 11-15)
     for i in range(11, 16):
-        style.add('TEXTCOLOR', (3, i), (3, i), RED_TEXT)
+        style.add('TEXTCOLOR', (3, i), (3, i), APP_RED)
+        
+    # Other Holdings (Row -3)
+    # Total Portfolio (Row -1)
     
+    # Re-apply coloring logic based on string content?
+    # ReportLab Table doesn't support conditional styling easily *after* data is text.
+    # But notice in the loops above in strict code, we constructed the `data` list.
+    # We can iterate through `data` and set specific cell text colors if we pass `style` object?
+    # No, usually we build one big style list.
+    
+    # Better approach: Use Paragraphs for cells with colors, OR add precise (row, col) styles.
+    # Let's add specific styles for the "Other Holdings" and "Total" rows based on sign.
+    
+    # Row indices in `data` list:
+    # 0: Month Header
+    # 1: Top Contrib Title
+    # 2: Top Contrib Headers
+    # 3-7: Top Contrib Data
+    # 8: Contrib Sum
+    # 9: Top Disrupt Title
+    # 10: Top Disrupt Headers
+    # 11-15: Top Disrupt Data
+    # 16: Disrupt Sum
+    # 17: Other Holdings
+    # 18: Total Portfolio
+    
+    # Colors for Sum rows (Σ)
+    # Contrib Sum (Row 8)
+    style.add('TEXTCOLOR', (3, 8), (3, 8), APP_GREEN) # Usually positive
+    
+    # Disrupt Sum (Row 16)
+    style.add('TEXTCOLOR', (3, 16), (3, 16), APP_RED) # Usually negative
+    
+    # Other Holdings (Row 17)
+    # We need to know if Other Holdings is pos/neg.
+    # In the code `other_contrib` variable holds this.
+    if other_contrib >= 0:
+         style.add('TEXTCOLOR', (3, 17), (3, 17), APP_GREEN)
+         style.add('TEXTCOLOR', (2, 17), (2, 17), APP_GREEN) # Perf too?
+    else:
+         style.add('TEXTCOLOR', (3, 17), (3, 17), APP_RED)
+         style.add('TEXTCOLOR', (2, 17), (2, 17), APP_RED)
+         
+    # Total Portfolio (Row 18)
+    if total_contrib >= 0:
+         style.add('TEXTCOLOR', (3, 18), (3, 18), APP_GREEN)
+    else:
+         style.add('TEXTCOLOR', (3, 18), (3, 18), APP_RED)
+
     table.setStyle(style)
     return table
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, Component, ErrorInfo } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { UploadView } from './views/UploadView';
 import { DashboardView } from './views/DashboardView';
@@ -7,6 +7,57 @@ import { CorrelationView } from './views/CorrelationView';
 import { AttributionView } from './views/AttributionView';
 import { IndexView } from './views/IndexView';
 import { PortfolioItem, ViewState } from './types';
+
+class GlobalErrorBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean, error: Error | null, errorInfo: ErrorInfo | null }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error("App Crashed:", error, errorInfo);
+    this.setState({ errorInfo });
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-screen bg-wallstreet-900 text-wallstreet-text p-8">
+          <div className="bg-red-50 text-red-900 border border-red-200 rounded-xl p-8 max-w-2xl w-full shadow-2xl">
+            <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+              <span className="text-3xl">💥</span> Application Crashed
+            </h2>
+            <div className="mb-6">
+              <p className="font-bold mb-2">Error Message:</p>
+              <pre className="bg-white p-4 rounded border border-red-100 overflow-x-auto text-sm font-mono text-red-700">
+                {this.state.error && this.state.error.toString()}
+              </pre>
+            </div>
+            <div>
+              <p className="font-bold mb-2">Stack Trace:</p>
+              <details className="bg-white p-4 rounded border border-red-100 overflow-x-auto text-xs font-mono max-h-[300px] overflow-y-auto">
+                <summary className="cursor-pointer text-slate-500 hover:text-slate-700 mb-2">View Details</summary>
+                {this.state.errorInfo && this.state.errorInfo.componentStack}
+              </details>
+            </div>
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-6 px-6 py-2 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 transition-colors"
+            >
+              Reload Application
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 function App() {
   const [currentView, setCurrentView] = useState<ViewState>(ViewState.UPLOAD);
@@ -77,18 +128,20 @@ function App() {
   };
 
   return (
-    <div className="flex min-h-screen bg-wallstreet-900 text-wallstreet-text font-sans">
-      <Sidebar
-        currentView={currentView}
-        setView={setCurrentView}
-        hasData={portfolioData.length > 0}
-      />
+    <GlobalErrorBoundary>
+      <div className="flex min-h-screen bg-wallstreet-900 text-wallstreet-text font-sans">
+        <Sidebar
+          currentView={currentView}
+          setView={setCurrentView}
+          hasData={portfolioData.length > 0}
+        />
 
-      <main className="flex-1 overflow-y-auto max-h-screen relative">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-wallstreet-100 via-white to-white -z-10 pointer-events-none"></div>
-        {renderContent()}
-      </main>
-    </div>
+        <main className="flex-1 overflow-y-auto max-h-screen relative">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-wallstreet-100 via-white to-white -z-10 pointer-events-none"></div>
+          {renderContent()}
+        </main>
+      </div>
+    </GlobalErrorBoundary>
   );
 }
 

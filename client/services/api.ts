@@ -5,7 +5,6 @@ const API_Base_URL = ''; // Use relative path to leverage Vite proxy
 export const analyzePortfolio = async (weightsFile: File, navFile?: File): Promise<PortfolioItem[]> => {
     const formData = new FormData();
     formData.append('weights_file', weightsFile);
-
     if (navFile) {
         formData.append('nav_file', navFile);
     }
@@ -25,6 +24,28 @@ export const analyzePortfolio = async (weightsFile: File, navFile?: File): Promi
         return data;
     } catch (error) {
         console.error("API Error details:", error);
+        throw error;
+    }
+};
+
+export const analyzeManualPortfolio = async (items: PortfolioItem[]): Promise<PortfolioItem[]> => {
+    try {
+        const response = await fetch(`${API_Base_URL}/analyze-manual`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ items }),
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Server Error: ${response.status} ${response.statusText} - ${errorText}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error("Manual Analysis Error:", error);
         throw error;
     }
 };

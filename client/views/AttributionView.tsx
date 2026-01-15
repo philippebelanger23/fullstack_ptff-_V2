@@ -1,8 +1,41 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, Component, ErrorInfo } from 'react';
 import { PortfolioItem } from '../types';
+
+class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean, error: Error | null, errorInfo: ErrorInfo | null }> {
+    constructor(props: any) {
+        super(props);
+        this.state = { hasError: false, error: null, errorInfo: null };
+    }
+
+    static getDerivedStateFromError(error: Error) {
+        return { hasError: true, error };
+    }
+
+    componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+        console.error("AttributionView Crashed:", error, errorInfo);
+        this.setState({ errorInfo });
+    }
+
+    render() {
+        if (this.state.hasError) {
+            return (
+                <div className="p-8 bg-red-50 text-red-900 border border-red-200 rounded-lg m-4">
+                    <h2 className="text-xl font-bold mb-4">Something went wrong in Attribution View</h2>
+                    <p className="font-mono text-sm mb-2">{this.state.error && this.state.error.toString()}</p>
+                    <details className="whitespace-pre-wrap font-mono text-xs bg-white p-4 border border-red-100 rounded">
+                        {this.state.errorInfo && this.state.errorInfo.componentStack}
+                    </details>
+                </div>
+            );
+        }
+
+        return this.props.children;
+    }
+}
+
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList, ReferenceLine, ScatterChart, Scatter, ZAxis, ComposedChart, Line, ReferenceArea } from 'recharts';
 import { KPICard } from '../components/KPICard';
-import { TrendingUp, Target, AlertTriangle, Calendar, Grid, Activity, Percent, Layers, Zap, Scale, Info, Printer, Download, Loader2 } from 'lucide-react';
+import { TrendingUp, Target, AlertTriangle, Calendar, Grid, Activity, Percent, Layers, Zap, Scale, Info, Printer, Download, Loader2, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { generatePDF } from '../services/api';
 
 interface AttributionViewProps {
@@ -240,26 +273,12 @@ const aggregatePeriodData = (data: PortfolioItem[]): TableItem[] => {
     return results;
 };
 
-export const AttributionView: React.FC<AttributionViewProps> = ({ data, uploadedFiles }) => {
+const AttributionViewContent: React.FC<AttributionViewProps> = ({ data, uploadedFiles }) => {
     const [viewMode, setViewMode] = useState<'OVERVIEW' | 'TABLES'>('OVERVIEW');
     const [timeRange, setTimeRange] = useState<'YTD' | 'Q1' | 'Q2' | 'Q3' | 'Q4'>('YTD');
-    const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
-    const [pdfError, setPdfError] = useState<string | null>(null);
 
-    const handleDownloadPDF = async () => {
-        if (!uploadedFiles?.weightsFile) {
-            setPdfError('No weights file available. Please re-run analysis.');
-            return;
-        }
-        setIsGeneratingPDF(true);
-        setPdfError(null);
-        try {
-            await generatePDF(uploadedFiles.weightsFile, uploadedFiles.navFile || undefined);
-        } catch (err: any) {
-            setPdfError(err.message || 'PDF generation failed');
-        } finally {
-            setIsGeneratingPDF(false);
-        }
+    const handlePrint = () => {
+        window.print();
     };
 
     const cleanData = useMemo(() => data, [data]);
@@ -592,6 +611,36 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data, uploaded
         return (mean / stdDev) * Math.sqrt(12);
     }, [heatmapTotals.monthlyReturns]);
 
+    // Debug logging
+    console.log("AttributionView Render:", { dataLen: data?.length, uploadedFiles });
+
+    if (!data || data.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center h-full p-12 text-center">
+                <div className="bg-wallstreet-800 p-8 rounded-xl border border-wallstreet-700 shadow-sm max-w-lg">
+                    <AlertTriangle size={48} className="text-wallstreet-accent mx-auto mb-4" />
+                    <h2 className="text-xl font-bold text-wallstreet-text mb-2">No Attribution Data Found</h2>
+                    <p className="text-wallstreet-500 mb-6">Import a dataset with Return and Contribution columns.</p>
+                </div>
+            </div>
+        );
+    }
+
+    // Safety check for data integrity
+    const hasValidData = data.some(d => d.contribution !== undefined);
+    if (!hasValidData) {
+        console.warn("Data missing contribution field:", data[0]);
+        return (
+            <div className="flex flex-col items-center justify-center h-full p-12 text-center">
+                <div className="bg-wallstreet-800 p-8 rounded-xl border border-wallstreet-700 shadow-sm max-w-lg">
+                    <AlertTriangle size={48} className="text-wallstreet-accent mx-auto mb-4" />
+                    <h2 className="text-xl font-bold text-wallstreet-text mb-2">Invalid Data Format</h2>
+                    <p className="text-wallstreet-500 mb-6">Data loaded but missing 'contribution' field.</p>
+                </div>
+            </div>
+        );
+    }
+
     if (!cleanData.some(d => d.contribution !== undefined)) {
         return (
             <div className="flex flex-col items-center justify-center h-full p-12 text-center">
@@ -606,12 +655,16 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data, uploaded
 
     return (
         <div className="max-w-[100vw] mx-auto p-4 md:p-6 space-y-6 overflow-x-hidden min-h-screen">
-            <header className="border-b border-wallstreet-700 pb-4 flex flex-col md:flex-row justify-between items-start md:items-end gap-4 print-hide">
+            <header className="border-b border-wallstreet-700 pb-4 flex flex-col md:flex-row justify-between items-start md:items-end gap-4 print:hidden">
                 <div>
                     <h2 className="text-3xl font-bold font-mono text-wallstreet-text">Performance Attribution</h2>
                     <p className="text-wallstreet-500 mt-1 text-sm">Allocation vs. Selection Effect Analysis (Excl. Cash)</p>
                 </div>
-                <div className="flex items-center gap-4 print-hide">
+                <div className="flex items-center gap-4">
+                    <div className="flex p-1 bg-wallstreet-200 rounded-lg">
+                        <button onClick={() => setViewMode('OVERVIEW')} className={`px-4 py-2 rounded-md text-xs font-bold font-mono transition-all flex items-center gap-2 ${viewMode === 'OVERVIEW' ? 'bg-white text-wallstreet-accent shadow-sm' : 'text-wallstreet-500 hover:text-wallstreet-text'}`}><Grid size={14} /> Overview</button>
+                        <button onClick={() => setViewMode('TABLES')} className={`px-4 py-2 rounded-md text-xs font-bold font-mono transition-all flex items-center gap-2 ${viewMode === 'TABLES' ? 'bg-white text-wallstreet-accent shadow-sm' : 'text-wallstreet-500 hover:text-wallstreet-text'}`}><Layers size={14} /> Tables</button>
+                    </div>
                     {/* Time Range Selector - Only visible in Overview */}
                     {viewMode === 'OVERVIEW' && (
                         <div className="flex items-center bg-white border border-wallstreet-700 rounded-lg p-1 shadow-sm">
@@ -621,36 +674,20 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data, uploaded
                         </div>
                     )}
 
-                    {/* Download PDF Button - Only visible in Tables view */}
-                    {viewMode === 'TABLES' && uploadedFiles?.weightsFile && (
+                    {/* Print PDF Button - Only visible in Tables view */}
+                    {viewMode === 'TABLES' && (
                         <button
-                            onClick={handleDownloadPDF}
-                            disabled={isGeneratingPDF}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold font-mono transition-all shadow-sm ${isGeneratingPDF
-                                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                                : 'bg-green-600 text-white hover:bg-green-700'
-                                }`}
+                            onClick={handlePrint}
+                            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-colors shadow-sm"
                         >
-                            {isGeneratingPDF ? (
-                                <>
-                                    <Loader2 size={14} className="animate-spin" />
-                                    Generating...
-                                </>
-                            ) : (
-                                <>
-                                    <Download size={14} />
-                                    Download PDF
-                                </>
-                            )}
+                            <Printer size={18} /> Print PDF
                         </button>
                     )}
-
-                    <div className="flex p-1 bg-wallstreet-200 rounded-lg">
-                        <button onClick={() => setViewMode('OVERVIEW')} className={`px-4 py-2 rounded-md text-xs font-bold font-mono transition-all flex items-center gap-2 ${viewMode === 'OVERVIEW' ? 'bg-white text-wallstreet-accent shadow-sm' : 'text-wallstreet-500 hover:text-wallstreet-text'}`}><Grid size={14} /> Overview</button>
-                        <button onClick={() => setViewMode('TABLES')} className={`px-4 py-2 rounded-md text-xs font-bold font-mono transition-all flex items-center gap-2 ${viewMode === 'TABLES' ? 'bg-white text-wallstreet-accent shadow-sm' : 'text-wallstreet-500 hover:text-wallstreet-text'}`}><Layers size={14} /> Tables</button>
-                    </div>
                 </div>
             </header>
+
+
+
 
             {viewMode === 'OVERVIEW' && (
                 <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
@@ -954,117 +991,124 @@ export const AttributionView: React.FC<AttributionViewProps> = ({ data, uploaded
             }
 
             {/* TABLES VIEW - Combined M M M Q layout */}
-            {viewMode === 'TABLES' && (
-                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 print-area">
-                    {/* Row 1: Jan, Feb, Mar, Q1 */}
-                    {allMonths.length >= 3 && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-end">
-                            {[0, 1, 2].map(monthIdx => {
-                                const date = allMonths[monthIdx];
-                                if (!date) return <div key={monthIdx} className="hidden" />;
-                                const monthlyData = data.filter(d => {
-                                    const dDate = new Date(d.date);
-                                    return dDate.getFullYear() === date.getFullYear() && dDate.getMonth() === date.getMonth() && !d.ticker.toUpperCase().includes('CASH');
-                                });
-                                if (monthlyData.length === 0) return <div key={monthIdx} className="hidden" />;
-                                const items = aggregatePeriodData(monthlyData);
-                                return <AttributionTable key={date.toISOString()} title={date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} items={items} />;
-                            })}
-                            {(() => {
-                                const q1Data = cleanData.filter(d => {
-                                    const m = new Date(d.date).getMonth();
-                                    const y = new Date(d.date).getFullYear();
-                                    return [0, 1, 2].includes(m) && y === primaryYear;
-                                });
-                                const uniqueMonths = new Set(q1Data.map(d => new Date(d.date).getMonth()));
-                                if (q1Data.length === 0 || uniqueMonths.size < 3) return null;
-                                return <AttributionTable key="Q1" title={`Q1 ${primaryYear}`} items={aggregatePeriodData(q1Data)} isQuarter={true} />;
-                            })()}
-                        </div>
-                    )}
+            {
+                viewMode === 'TABLES' && (
+                    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 print-area">
+                        {/* Row 1: Jan, Feb, Mar, Q1 */}
+                        {allMonths.length >= 3 && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-end print-spaced-row print-top-spacing">
+                                {[0, 1, 2].map(monthIdx => {
+                                    const date = allMonths[monthIdx];
+                                    if (!date) return <div key={monthIdx} className="hidden" />;
+                                    const monthlyData = data.filter(d => {
+                                        const dDate = new Date(d.date);
+                                        return dDate.getFullYear() === date.getFullYear() && dDate.getMonth() === date.getMonth() && !d.ticker.toUpperCase().includes('CASH');
+                                    });
+                                    if (monthlyData.length === 0) return <div key={monthIdx} className="hidden" />;
+                                    const items = aggregatePeriodData(monthlyData);
+                                    return <AttributionTable key={date.toISOString()} title={date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} items={items} />;
+                                })}
+                                {(() => {
+                                    const q1Data = cleanData.filter(d => {
+                                        const m = new Date(d.date).getMonth();
+                                        const y = new Date(d.date).getFullYear();
+                                        return [0, 1, 2].includes(m) && y === primaryYear;
+                                    });
+                                    const uniqueMonths = new Set(q1Data.map(d => new Date(d.date).getMonth()));
+                                    if (q1Data.length === 0 || uniqueMonths.size < 3) return null;
+                                    return <AttributionTable key="Q1" title={`Q1 ${primaryYear}`} items={aggregatePeriodData(q1Data)} isQuarter={true} />;
+                                })()}
+                            </div>
+                        )}
 
-                    {/* Row 2: Apr, May, Jun, Q2 */}
-                    {allMonths.length >= 6 && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-end">
-                            {[3, 4, 5].map(monthIdx => {
-                                const date = allMonths[monthIdx];
-                                if (!date) return <div key={monthIdx} className="hidden" />;
-                                const monthlyData = data.filter(d => {
-                                    const dDate = new Date(d.date);
-                                    return dDate.getFullYear() === date.getFullYear() && dDate.getMonth() === date.getMonth() && !d.ticker.toUpperCase().includes('CASH');
-                                });
-                                if (monthlyData.length === 0) return <div key={monthIdx} className="hidden" />;
-                                const items = aggregatePeriodData(monthlyData);
-                                return <AttributionTable key={date.toISOString()} title={date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} items={items} />;
-                            })}
-                            {(() => {
-                                const q2Data = cleanData.filter(d => {
-                                    const m = new Date(d.date).getMonth();
-                                    const y = new Date(d.date).getFullYear();
-                                    return [3, 4, 5].includes(m) && y === primaryYear;
-                                });
-                                const uniqueMonths = new Set(q2Data.map(d => new Date(d.date).getMonth()));
-                                if (q2Data.length === 0 || uniqueMonths.size < 3) return null;
-                                return <AttributionTable key="Q2" title={`Q2 ${primaryYear}`} items={aggregatePeriodData(q2Data)} isQuarter={true} />;
-                            })()}
-                        </div>
-                    )}
+                        {/* Row 2: Apr, May, Jun, Q2 */}
+                        {allMonths.length >= 6 && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-end print-break-after">
+                                {[3, 4, 5].map(monthIdx => {
+                                    const date = allMonths[monthIdx];
+                                    if (!date) return <div key={monthIdx} className="hidden" />;
+                                    const monthlyData = data.filter(d => {
+                                        const dDate = new Date(d.date);
+                                        return dDate.getFullYear() === date.getFullYear() && dDate.getMonth() === date.getMonth() && !d.ticker.toUpperCase().includes('CASH');
+                                    });
+                                    if (monthlyData.length === 0) return <div key={monthIdx} className="hidden" />;
+                                    const items = aggregatePeriodData(monthlyData);
+                                    return <AttributionTable key={date.toISOString()} title={date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} items={items} />;
+                                })}
+                                {(() => {
+                                    const q2Data = cleanData.filter(d => {
+                                        const m = new Date(d.date).getMonth();
+                                        const y = new Date(d.date).getFullYear();
+                                        return [3, 4, 5].includes(m) && y === primaryYear;
+                                    });
+                                    const uniqueMonths = new Set(q2Data.map(d => new Date(d.date).getMonth()));
+                                    if (q2Data.length === 0 || uniqueMonths.size < 3) return null;
+                                    return <AttributionTable key="Q2" title={`Q2 ${primaryYear}`} items={aggregatePeriodData(q2Data)} isQuarter={true} />;
+                                })()}
+                            </div>
+                        )}
 
-                    {/* Row 3: Jul, Aug, Sep, Q3 */}
-                    {allMonths.length >= 9 && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-end">
-                            {[6, 7, 8].map(monthIdx => {
-                                const date = allMonths[monthIdx];
-                                if (!date) return <div key={monthIdx} className="hidden" />;
-                                const monthlyData = data.filter(d => {
-                                    const dDate = new Date(d.date);
-                                    return dDate.getFullYear() === date.getFullYear() && dDate.getMonth() === date.getMonth() && !d.ticker.toUpperCase().includes('CASH');
-                                });
-                                if (monthlyData.length === 0) return <div key={monthIdx} className="hidden" />;
-                                const items = aggregatePeriodData(monthlyData);
-                                return <AttributionTable key={date.toISOString()} title={date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} items={items} />;
-                            })}
-                            {(() => {
-                                const q3Data = cleanData.filter(d => {
-                                    const m = new Date(d.date).getMonth();
-                                    const y = new Date(d.date).getFullYear();
-                                    return [6, 7, 8].includes(m) && y === primaryYear;
-                                });
-                                const uniqueMonths = new Set(q3Data.map(d => new Date(d.date).getMonth()));
-                                if (q3Data.length === 0 || uniqueMonths.size < 3) return null;
-                                return <AttributionTable key="Q3" title={`Q3 ${primaryYear}`} items={aggregatePeriodData(q3Data)} isQuarter={true} />;
-                            })()}
-                        </div>
-                    )}
+                        {/* Row 3: Jul, Aug, Sep, Q3 */}
+                        {allMonths.length >= 9 && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-end print-spaced-row print-top-spacing">
+                                {[6, 7, 8].map(monthIdx => {
+                                    const date = allMonths[monthIdx];
+                                    if (!date) return <div key={monthIdx} className="hidden" />;
+                                    const monthlyData = data.filter(d => {
+                                        const dDate = new Date(d.date);
+                                        return dDate.getFullYear() === date.getFullYear() && dDate.getMonth() === date.getMonth() && !d.ticker.toUpperCase().includes('CASH');
+                                    });
+                                    if (monthlyData.length === 0) return <div key={monthIdx} className="hidden" />;
+                                    const items = aggregatePeriodData(monthlyData);
+                                    return <AttributionTable key={date.toISOString()} title={date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} items={items} />;
+                                })}
+                                {(() => {
+                                    const q3Data = cleanData.filter(d => {
+                                        const m = new Date(d.date).getMonth();
+                                        const y = new Date(d.date).getFullYear();
+                                        return [6, 7, 8].includes(m) && y === primaryYear;
+                                    });
+                                    const uniqueMonths = new Set(q3Data.map(d => new Date(d.date).getMonth()));
+                                    if (q3Data.length === 0 || uniqueMonths.size < 3) return null;
+                                    return <AttributionTable key="Q3" title={`Q3 ${primaryYear}`} items={aggregatePeriodData(q3Data)} isQuarter={true} />;
+                                })()}
+                            </div>
+                        )}
 
-                    {/* Row 4: Oct, Nov, Dec, Q4 */}
-                    {allMonths.length >= 12 && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-end">
-                            {[9, 10, 11].map(monthIdx => {
-                                const date = allMonths[monthIdx];
-                                if (!date) return <div key={monthIdx} className="hidden" />;
-                                const monthlyData = data.filter(d => {
-                                    const dDate = new Date(d.date);
-                                    return dDate.getFullYear() === date.getFullYear() && dDate.getMonth() === date.getMonth() && !d.ticker.toUpperCase().includes('CASH');
-                                });
-                                if (monthlyData.length === 0) return <div key={monthIdx} className="hidden" />;
-                                const items = aggregatePeriodData(monthlyData);
-                                return <AttributionTable key={date.toISOString()} title={date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} items={items} />;
-                            })}
-                            {(() => {
-                                const q4Data = cleanData.filter(d => {
-                                    const m = new Date(d.date).getMonth();
-                                    const y = new Date(d.date).getFullYear();
-                                    return [9, 10, 11].includes(m) && y === primaryYear;
-                                });
-                                const uniqueMonths = new Set(q4Data.map(d => new Date(d.date).getMonth()));
-                                if (q4Data.length === 0 || uniqueMonths.size < 3) return null;
-                                return <AttributionTable key="Q4" title={`Q4 ${primaryYear}`} items={aggregatePeriodData(q4Data)} isQuarter={true} />;
-                            })()}
-                        </div>
-                    )}
-                </div>
-            )}
+                        {/* Row 4: Oct, Nov, Dec, Q4 */}
+                        {allMonths.length >= 12 && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-end">
+                                {[9, 10, 11].map(monthIdx => {
+                                    const date = allMonths[monthIdx];
+                                    if (!date) return <div key={monthIdx} className="hidden" />;
+                                    const monthlyData = data.filter(d => {
+                                        const dDate = new Date(d.date);
+                                        return dDate.getFullYear() === date.getFullYear() && dDate.getMonth() === date.getMonth() && !d.ticker.toUpperCase().includes('CASH');
+                                    });
+                                    if (monthlyData.length === 0) return <div key={monthIdx} className="hidden" />;
+                                    const items = aggregatePeriodData(monthlyData);
+                                    return <AttributionTable key={date.toISOString()} title={date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} items={items} />;
+                                })}
+                                {(() => {
+                                    const q4Data = cleanData.filter(d => {
+                                        const m = new Date(d.date).getMonth();
+                                        const y = new Date(d.date).getFullYear();
+                                        return [9, 10, 11].includes(m) && y === primaryYear;
+                                    });
+                                    const uniqueMonths = new Set(q4Data.map(d => new Date(d.date).getMonth()));
+                                    if (q4Data.length === 0 || uniqueMonths.size < 3) return null;
+                                    return <AttributionTable key="Q4" title={`Q4 ${primaryYear}`} items={aggregatePeriodData(q4Data)} isQuarter={true} />;
+                                })()}
+                            </div>
+                        )}
+                    </div>
+                )
+            }
         </div >
     );
 };
+export const AttributionView: React.FC<AttributionViewProps> = (props) => (
+    <ErrorBoundary>
+        <AttributionViewContent {...props} />
+    </ErrorBoundary>
+);

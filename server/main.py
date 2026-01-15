@@ -63,10 +63,7 @@ async def analyze_portfolio(
             with nav_path.open("wb") as buffer:
                 shutil.copyfileobj(nav_file.file, buffer)
         
-        # --- Core Logic from portfolio_returns.py main() ---
-        
-        cache = load_cache()
-        
+        # Load data from files
         logger.info(f"Loading weights file: {weights_path}")
         weights_dict, dates = load_weights_file(str(weights_path))
         
@@ -75,62 +72,8 @@ async def analyze_portfolio(
             logger.info(f"Loading NAV file: {nav_path}")
             nav_dict = load_nav_file(str(nav_path))
             
-        logger.info("Fetching market data...")
-        returns, prices = calculate_returns(weights_dict, nav_dict, dates, cache)
-        
-        # We don't necessarily need the benchmark returns for the dashboard view yet, 
-        # but the calculation updates the cache, so we might as well keep it if needed later.
-        # benchmark_returns = calculate_benchmark_returns(dates, cache)
-        
-        save_cache(cache)
-        
-        logger.info("Building results dataframe...")
-        # Note: build_results_dataframe sorts by YTD_Contrib desc
-        df, periods = build_results_dataframe(weights_dict, returns, prices, dates, cache)
-        
-        # --- Transformation Logic: Wide (Server) -> Long (Client) ---
-        
-        result_items = []
-        
-        # periods is a list of tuples: (start_date, end_date)
-        # df columns: Ticker, Weight_0, Return_0, Contrib_0, ..., YTD_Return, YTD_Contrib
-        
-        if df.empty:
-            return []
-            
-        # Iterate through each period to create time-series data for the client
-        for i, period in enumerate(periods):
-            # Use period END date to match Excel logic (top_contributors_sheet.py)
-            end_date_ts = period[1] # Timestamp
-            # Format date as YYYY-MM-DD for consistency
-            date_str = end_date_ts.strftime("%Y-%m-%d")
-            
-            for _, row in df.iterrows():
-                ticker = row['Ticker']
-                
-                # Extract values for this specific period
-                weight = row.get(f'Weight_{i}', 0.0)
-                # weights logic in market_data.py seems to handle safe gets, but let's be safe
-                ret = row.get(f'Return_{i}', 0.0)
-                contrib = row.get(f'Contrib_{i}', 0.0)
-                
-                # Only add if there's meaningful data or if it's a held position
-                # (Client logic might filter later, but let's send everything for now)
-                
-                item = PortfolioItem(
-                    ticker=ticker,
-                    weight=float(weight),  # Ensure native Python float
-                    date=date_str,
-                    returnPct=float(ret),
-                    contribution=float(contrib),
-                    # Optional fields - could be enriched if we had metadata
-                    companyName=None,
-                    sector=None, 
-                    notes=None
-                )
-                result_items.append(item)
-                
-        return result_items
+        # Run analysis
+        return run_portfolio_analysis(weights_dict, nav_dict, dates)
 
     except Exception as e:
         logger.error(f"Error processing analysis: {str(e)}", exc_info=True)
@@ -144,6 +87,98 @@ async def analyze_portfolio(
             nav_path.unlink()
         if temp_dir.exists():
             shutil.rmtree(temp_dir, ignore_errors=True)
+
+class ManualAnalysisRequest(BaseModel):
+    items: List[PortfolioItem]
+
+@app.post("/analyze-manual", response_model=List[PortfolioItem])
+async def analyze_manual(request: ManualAnalysisRequest):
+    try:
+        from datetime import datetime
+        
+        # Convert flat list of items to weights_dict and dates
+        weights_dict = {}
+        dates_set = set()
+        
+        for item in request.items:
+            ticker = item.ticker.upper().strip()
+            if not ticker or 'TICKER' in ticker: 
+                continue
+                
+            try:
+                # Handle date parsing (expects YYYY-MM-DD from frontend)
+                dt = datetime.strptime(item.date, "%Y-%m-%d")
+                dates_set.add(dt)
+                
+                if ticker not in weights_dict:
+                    weights_dict[ticker] = {}
+                
+                # Frontend sends 50 for 50% usually, or 0.5. 
+                # Our load_weights_file normalizes >1.0 to /100.
+                # Let's apply same logic.
+                w = float(item.weight)
+                if w > 1.0:
+                    w = w / 100.0
+                    
+                weights_dict[ticker][dt] = w
+            except Exception as e:
+                logger.warning(f"Skipping invalid item {item}: {e}")
+                
+        dates = sorted(list(dates_set))
+        if not dates:
+             raise HTTPException(status_code=400, detail="No valid dates found in data")
+             
+        # Run analysis (empty nav_dict for manual)
+        return run_portfolio_analysis(weights_dict, {}, dates)
+        
+    except Exception as e:
+        logger.error(f"Error in manual analysis: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+def run_portfolio_analysis(weights_dict, nav_dict, dates):
+    """Core logic shared between file upload and manual entry."""
+    cache = load_cache()
+    
+    logger.info("Fetching market data...")
+    returns, prices = calculate_returns(weights_dict, nav_dict, dates, cache)
+    
+    save_cache(cache)
+    
+    logger.info("Building results dataframe...")
+    df, periods = build_results_dataframe(weights_dict, returns, prices, dates, cache)
+    
+    result_items = []
+    
+    if df.empty:
+        return []
+        
+    # Iterate through each period to create time-series data for the client
+    for i, period in enumerate(periods):
+        end_date_ts = period[1]
+        date_str = end_date_ts.strftime("%Y-%m-%d")
+        
+        for _, row in df.iterrows():
+            ticker = row['Ticker']
+            
+            # Extract values for this specific period
+            weight = row.get(f'Weight_{i}', 0.0)
+            ret = row.get(f'Return_{i}', 0.0)
+            contrib = row.get(f'Contrib_{i}', 0.0)
+            
+            item = PortfolioItem(
+                ticker=ticker,
+                weight=float(weight),
+                date=date_str,
+                returnPct=float(ret),
+                contribution=float(contrib),
+                # Optional fields
+                companyName=None,
+                sector=None, 
+                notes=None
+            )
+            result_items.append(item)
+            
+    return result_items
 
 @app.post("/generate-pdf")
 async def generate_pdf_endpoint(
